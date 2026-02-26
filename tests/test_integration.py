@@ -11,6 +11,7 @@ import pytest
 from doc_checker.checkers import DriftDetector
 from doc_checker.cli import main
 from doc_checker.formatters import format_report
+from doc_checker.models import DriftReport
 
 
 @pytest.fixture
@@ -161,6 +162,33 @@ def test_integration_report_formatting(integration_project: Path):
     assert "has_issues" in json_output
 
 
+def test_format_report_external_links_summary():
+    """Format report shows external links summary."""
+    report = DriftReport(
+        total_external_links=10,
+        broken_external_links=[
+            {
+                "url": "https://bad.com",
+                "status": 404,
+                "location": "docs/a.md:1",
+                "text": "bad",
+            },
+        ],
+    )
+    output = format_report(report)
+    assert "External links: 1/10 broken" in output
+
+    # No broken links
+    report_ok = DriftReport(total_external_links=5)
+    output_ok = format_report(report_ok)
+    assert "External links: 0/5 broken" in output_ok
+
+    # No external check run -> no summary line
+    report_none = DriftReport()
+    output_none = format_report(report_none)
+    assert "External links" not in output_none
+
+
 def test_integration_with_quality_checks_mocked(integration_project: Path):
     """Test integration with mocked LLM quality checks."""
     mock_checker = MagicMock()
@@ -185,7 +213,9 @@ def test_integration_with_quality_checks_mocked(integration_project: Path):
 
     detector = DriftDetector(integration_project, modules=["my_lib"])
 
-    with patch("doc_checker.llm_checker.QualityChecker") as mock_checker_class:
+    with patch(
+        "doc_checker.checkers_folder.quality.QualityChecker"
+    ) as mock_checker_class:
         mock_checker_class.return_value = mock_checker
         report = detector.check_all(check_quality=True, verbose=False)
 
@@ -277,7 +307,9 @@ def test_integration_json_output(integration_project: Path):
         )
     ]
 
-    with patch("doc_checker.llm_checker.QualityChecker") as mock_checker_class:
+    with patch(
+        "doc_checker.checkers_folder.quality.QualityChecker"
+    ) as mock_checker_class:
         mock_checker_class.return_value = mock_checker
         report = detector.check_all(check_quality=True)
 
@@ -376,7 +408,7 @@ class TestCLIBehavior:
         mock_checker = MagicMock()
         mock_checker.check_module_quality.return_value = []
 
-        with patch("doc_checker.llm_checker.QualityChecker") as mock_cls:
+        with patch("doc_checker.checkers_folder.quality.QualityChecker") as mock_cls:
             mock_cls.return_value = mock_checker
             # Simulate --check-quality: basic + quality, no external
             report = detector.check_all(
@@ -401,7 +433,7 @@ class TestCLIBehavior:
         mock_checker = MagicMock()
         mock_checker.check_module_quality.return_value = []
 
-        with patch("doc_checker.llm_checker.QualityChecker") as mock_cls:
+        with patch("doc_checker.checkers_folder.quality.QualityChecker") as mock_cls:
             mock_cls.return_value = mock_checker
             report = detector.check_all(
                 check_external_links=True,
