@@ -44,7 +44,7 @@ def main() -> int:
     parser.add_argument(
         "--llm-model",
         type=str,
-        help="LLM model name (defaults: qwen2.5:3b for ollama, gpt-4o-mini for openai)",  # noqa: E501
+        help="LLM model name (defaults: qwen3:1.7b for ollama, gpt-5.2 for openai)",
     )
     parser.add_argument(
         "--quality-sample",
@@ -75,7 +75,7 @@ def main() -> int:
     parser.add_argument(
         "--ignore-submodules",
         nargs="+",
-        default=[],
+        default=["emu_mps.optimatrix"],
         help="Submodule paths to skip (e.g. emu_mps.optimatrix)",
     )
     parser.add_argument(
