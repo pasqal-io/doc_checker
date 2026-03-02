@@ -75,7 +75,7 @@ def main() -> int:
     parser.add_argument(
         "--ignore-submodules",
         nargs="+",
-        default=[],
+        default=["emu_mps.optimatrix"],
         help="Submodule paths to skip (e.g. emu_mps.optimatrix)",
     )
     parser.add_argument(
