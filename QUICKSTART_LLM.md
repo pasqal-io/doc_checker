@@ -18,7 +18,7 @@ ollama serve
 
 ```bash
 # Best quality (2GB VRAM)
-ollama pull qwen2.5:3b
+ollama pull qwen3:4b
 
 # Fastest (1.5GB VRAM)
 ollama pull gemma2:2b
