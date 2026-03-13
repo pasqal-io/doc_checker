@@ -17,11 +17,8 @@ ollama serve
 **Recommended for 4GB GPU:**
 
 ```bash
-# Default (1GB VRAM)
+# Best quality (2GB VRAM)
 ollama pull qwen3:1.7b
-
-# Higher quality (2GB VRAM)
-ollama pull qwen3:4b
 
 # Fastest (1.5GB VRAM)
 ollama pull gemma2:2b
@@ -40,20 +37,20 @@ pip install -e ".[llm]"
 ### 4. Run Quality Checks
 
 ```bash
-# Basic check (uses qwen3:1.7b by default)
-doc-checker --modules my_pkg --check-quality --root /path/to/project
+# Basic check (uses qwen2.5:3b by default)
+doc-checker --check-quality --root /path/to/project
 
 # With verbose output
-doc-checker --modules my_pkg --check-quality --verbose --root /path/to/project
+doc-checker --check-quality --verbose --root /path/to/project
 
 # Check only 10% of APIs (faster for testing)
-doc-checker --modules my_pkg --check-quality --quality-sample 0.1 --verbose --root .
+doc-checker --check-quality --quality-sample 0.1 --verbose --root .
 
-# Use a different model
-doc-checker --modules my_pkg --check-quality --llm-model qwen3:4b --root .
+# Use faster model
+doc-checker --check-quality --llm-model gemma2:2b --root .
 
-# Run all checks including quality
-doc-checker --modules my_pkg --check-all --root .
+# Combine with other checks
+doc-checker --check-all --check-quality --root .
 ```
 
 ### 5. Verify GPU Usage
@@ -69,8 +66,7 @@ nvidia-smi
 
 | Model | VRAM | Speed | Quality | Command |
 |-------|------|-------|---------|---------|
-| **qwen3:1.7b** | 1GB | Very Fast | ⭐⭐⭐⭐ | `--llm-model qwen3:1.7b` (default) |
-| qwen3:4b | 2GB | Fast | ⭐⭐⭐⭐⭐ | `--llm-model qwen3:4b` |
+| **qwen2.5:3b** | 2GB | Fast | ⭐⭐⭐⭐⭐ | `--llm-model qwen2.5:3b` (default) |
 | gemma2:2b | 1.5GB | Very Fast | ⭐⭐⭐ | `--llm-model gemma2:2b` |
 | phi3.5 | 2.5GB | Fast | ⭐⭐⭐⭐ | `--llm-model phi3.5` |
 | llama3.2:3b | 2GB | Fast | ⭐⭐⭐⭐ | `--llm-model llama3.2:3b` |
@@ -120,11 +116,11 @@ If you prefer OpenAI (requires API key):
 # Set API key
 export OPENAI_API_KEY='sk-proj-...'
 
-# Run with OpenAI (uses gpt-5.2 by default)
-doc-checker --modules my_pkg --check-quality --llm-backend openai --root .
+# Run with OpenAI
+doc-checker --check-quality --llm-backend openai --root .
 
 # Use specific model
-doc-checker --modules my_pkg --check-quality --llm-backend openai --llm-model gpt-4o --root .
+doc-checker --check-quality --llm-backend openai --llm-model gpt-4o --root .
 ```
 
 ## Troubleshooting
@@ -138,16 +134,16 @@ ollama serve
 ### "Model not found"
 ```bash
 ollama list  # Check installed models
-ollama pull qwen3:1.7b  # Install default model
+ollama pull qwen2.5:3b  # Install model
 ```
 
 ### Out of Memory Error
 ```bash
 # Use smaller model
-doc-checker --modules my_pkg --check-quality --llm-model gemma2:2b --root .
+doc-checker --check-quality --llm-model gemma2:2b --root .
 
 # Or check fewer APIs
-doc-checker --modules my_pkg --check-quality --quality-sample 0.2 --root .
+doc-checker --check-quality --quality-sample 0.2 --root .
 ```
 
 ### GPU Not Used (CPU fallback)
