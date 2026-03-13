@@ -701,7 +701,7 @@ class TestQualityChecks:
         mock_checker.check_module_quality.return_value = [
             MagicMock(
                 api_name="test_pkg.test_function",
-                severity="warning",
+                severity="warng",
                 category="grammar",
                 message="Test issue",
                 suggestion="Fix it",
