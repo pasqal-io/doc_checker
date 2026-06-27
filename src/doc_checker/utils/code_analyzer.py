@@ -186,11 +186,13 @@ class CodeAnalyzer:
             SignatureInfo with kind="class", parameters from __init__.
         """
         params: list[str] = []
+        signature: str | None = None
         try:
             sig = inspect.signature(cls)
             params = [
                 self._format_param(p) for p in sig.parameters.values() if p.name != "self"
             ]
+            signature = str(sig)
         except (ValueError, TypeError):
             pass
 
@@ -203,6 +205,7 @@ class CodeAnalyzer:
             is_public=not name.startswith("_"),
             kind="class",
             source_excerpt=self._get_source_excerpt(cls),
+            signature=signature,
         )
 
     def _extract_function_signature(
@@ -220,6 +223,7 @@ class CodeAnalyzer:
         """
         params = []
         return_ann = None
+        signature: str | None = None
         try:
             sig = inspect.signature(func)
             params = [
@@ -229,6 +233,7 @@ class CodeAnalyzer:
             ]
             if sig.return_annotation != inspect.Signature.empty:
                 return_ann = str(sig.return_annotation)
+            signature = str(sig)
         except (ValueError, TypeError):
             pass
 
@@ -241,6 +246,7 @@ class CodeAnalyzer:
             is_public=not name.startswith("_"),
             kind="function",
             source_excerpt=self._get_source_excerpt(func),
+            signature=signature,
         )
 
     def _get_source_excerpt(self, obj: Any) -> str | None:

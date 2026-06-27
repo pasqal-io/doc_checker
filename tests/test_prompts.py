@@ -95,3 +95,17 @@ def test_combined_quality_prompt_omits_score():
 
     assert "score" not in prompt.lower()
     assert "summary" not in prompt.lower()
+
+
+def test_combined_quality_prompt_caps_issue_count():
+    """Test prompt caps the number of reported issues."""
+    prompt = get_combined_quality_prompt("def f() -> None", "Test", "module.f")
+
+    assert "at most the 3 most important issues" in prompt
+
+
+def test_combined_quality_prompt_trusts_signature():
+    """Test prompt tells the model the signature is faithful to the code."""
+    prompt = get_combined_quality_prompt("def f() -> None", "Test", "module.f")
+
+    assert "do NOT report mismatches between the signature" in prompt

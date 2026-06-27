@@ -49,6 +49,10 @@ class SignatureInfo:
         kind: One of "function", "method", or "class".
         source_excerpt: First lines of the object's source (for code-vs-docstring
             alignment), or None if the source could not be read.
+        signature: Faithful rendering of the call signature via inspect.signature
+            (preserves "*", keyword-only markers, and full annotations), e.g.
+            "(mps_site: int, *, evaluation_times: Sequence[float] | None = None)".
+            None if it could not be introspected.
     """
 
     name: str
@@ -59,6 +63,7 @@ class SignatureInfo:
     is_public: bool
     kind: str
     source_excerpt: str | None = None
+    signature: str | None = None
 
 
 @dataclass

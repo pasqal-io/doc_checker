@@ -150,12 +150,18 @@ class QualityChecker:
                 )
             ]
 
-        # Build signature string
-        params_str = ", ".join(api_info.parameters)
-        return_str = (
-            f" -> {api_info.return_annotation}" if api_info.return_annotation else ""
-        )
-        signature = f"def {api_info.name}({params_str}){return_str}"
+        # Build signature string. Prefer the faithful inspect.signature rendering
+        # (preserves "*", keyword-only markers, and full annotations) so it agrees
+        # with the source excerpt; fall back to the reconstructed form only when
+        # the signature could not be introspected.
+        if api_info.signature is not None:
+            signature = f"def {api_info.name}{api_info.signature}"
+        else:
+            params_str = ", ".join(api_info.parameters)
+            return_str = (
+                f" -> {api_info.return_annotation}" if api_info.return_annotation else ""
+            )
+            signature = f"def {api_info.name}({params_str}){return_str}"
 
         if verbose:
             print(f"  Checking {display_name}...")

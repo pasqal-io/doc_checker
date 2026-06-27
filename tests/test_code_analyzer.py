@@ -116,6 +116,29 @@ class TestCodeAnalyzer:
         assert class_api.source_excerpt is not None
         assert "self.param1 = param1" in class_api.source_excerpt
 
+    def test_signature_is_faithful(self, tmp_path: Path):
+        """signature preserves the keyword-only '*' marker and annotations."""
+        module_dir = tmp_path / "sig_module"
+        module_dir.mkdir()
+        (module_dir / "__init__.py").write_text(
+            '__all__ = ["kw_only"]\n'
+            "def kw_only(a: int, *, b: str = 'x') -> bool:\n"
+            '    """Doc."""\n'
+            "    return True\n"
+        )
+        sys.path.insert(0, str(tmp_path))
+        try:
+            analyzer = CodeAnalyzer(tmp_path)
+            api = next(
+                a for a in analyzer.get_public_apis("sig_module") if a.name == "kw_only"
+            )
+            assert api.signature is not None
+            # The '*' marker (lost by the old reconstruction) must survive.
+            assert "*" in api.signature
+            assert api.signature == "(a: int, *, b: str = 'x') -> bool"
+        finally:
+            sys.modules.pop("sig_module", None)
+
     def test_parameter_formatting(self, sample_module: ModuleType, tmp_path: Path):
         analyzer = CodeAnalyzer(tmp_path)
         apis = analyzer.get_public_apis("test_module")
