@@ -47,7 +47,7 @@ Supporting modules: `utils/parsers.py` (MarkdownParser/YamlParser), `utils/code_
 
 **Checker hierarchy** (`checkers_folder/base.py`):
 - `Checker` — abstract base, `check(report)` mutates `DriftReport`
-- `ApiChecker(Checker)` — iterates public APIs via `_iter_apis()`, subclasses implement `check_api()`
+- `ApiChecker(Checker)` — iterates public APIs via `_iter_apis()`, subclasses implement `check_api()`; optional `setup()` runs once before the loop (build lookup tables / ref sets)
 - `DocArtifactChecker(Checker)` — iterates doc artifacts via `collect()`, subclasses implement `validate()`
 
 **Extracted checkers** (all in `checkers_folder/`):

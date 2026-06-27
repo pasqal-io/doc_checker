@@ -116,7 +116,9 @@ def test_openai_backend_api_key_from_env():
 
 def test_openai_backend_no_api_key():
     """Test OpenAIBackend raises error if no API key provided."""
-    with patch("openai.OpenAI") as mock_openai_class:
+    with patch("openai.OpenAI") as mock_openai_class, patch.dict(
+        "os.environ", {}, clear=True
+    ):
         mock_openai_class.return_value = MagicMock()
         with pytest.raises(ValueError, match="OpenAI API key required"):
             OpenAIBackend(model="gpt-4o")
