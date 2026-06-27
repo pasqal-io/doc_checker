@@ -68,8 +68,10 @@ Supporting modules: `utils/parsers.py` (MarkdownParser/YamlParser), `utils/code_
 - `LinkChecker` uses async aiohttp with urllib fallback; HEAD first, GET on 405; 403/429 accepted as not broken; concurrency capped at 5
 - Reference validation (`ReferencesChecker._is_valid_reference`): progressively imports dotted path — tries `importlib.import_module("a.b.c")`, then `"a.b"` + `getattr(mod, "c")`, etc.
 - Local link resolution order: direct relative from file dir -> `../` from docs root -> absolute from project root -> mkdocs URL-style with auto `.ipynb` extension
-- `PULSER_REEXPORTS` and `IGNORE_PARAMS` live in `constants.py`
+- `PULSER_REEXPORTS`, `IGNORE_PARAMS`, and `SEVERITY_RANK` live in `constants.py`
 - `OpenAIBackend` is gpt-5.x only (default `gpt-5.5`); uses Responses API (`client.responses.create`, `max_output_tokens=16384`). gpt-5.x reasoning models reject custom `temperature`, so `generate()` keeps the `temperature` param for interface compat but does NOT forward it. Older non-reasoning chat models (gpt-4o etc.) are unsupported.
+- `prompts.py` has a single template, `get_combined_quality_prompt` (one LLM call per API). It requests only an `issues` array (no `score`/`summary` — those were unused) and instructs the model not to assert behavior it cannot see from the signature+docstring.
+- `--quality-min-severity` (`suggestion`|`warning`|`critical`, default `suggestion`=keep all) filters quality issues in `LLMQualityChecker.check()` via `SEVERITY_RANK` before they reach the report, so it also affects exit code; unknown severities are always kept
 - No check flags -> runs all checks; `--check-basic` skips external/quality
 - `--warn-only` always exits 0
 - Notebook links: `.md` -> `.ipynb` required; `.ipynb` -> `.ipynb` forbidden

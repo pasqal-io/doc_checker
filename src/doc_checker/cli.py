@@ -52,6 +52,12 @@ def main() -> int:
         default=1.0,
         help="Sample rate for quality checks (0.0-1.0, default: 1.0 = all APIs)",
     )
+    parser.add_argument(
+        "--quality-min-severity",
+        choices=["critical", "warning", "suggestion"],
+        default="suggestion",
+        help="Drop quality issues below this severity (default: suggestion = keep all)",
+    )
     parser.add_argument("--verbose", "-v", action="store_true", help="Verbose output")
     parser.add_argument("--json", action="store_true", help="Output as JSON")
     parser.add_argument(
@@ -131,6 +137,7 @@ def main() -> int:
             quality_model=args.llm_model,
             quality_api_key=api_key,
             quality_sample_rate=args.quality_sample,
+            quality_min_severity=args.quality_min_severity,
             verbose=args.verbose,
         )
 

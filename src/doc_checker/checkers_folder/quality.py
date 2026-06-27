@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from doc_checker.constants import SEVERITY_RANK
 from doc_checker.llm_backends import get_backend
 from doc_checker.models import DriftReport, QualityIssue
 from doc_checker.prompts import get_combined_quality_prompt
@@ -26,6 +27,7 @@ class LLMQualityChecker(Checker):
         model: str | None = None,
         api_key: str | None = None,
         sample_rate: float = 1.0,
+        min_severity: str = "suggestion",
         verbose: bool = False,
     ):
         self.root_path = root_path
@@ -35,6 +37,7 @@ class LLMQualityChecker(Checker):
         self.model = model
         self.api_key = api_key
         self.sample_rate = sample_rate
+        self.min_severity = min_severity
         self.verbose = verbose
 
     def check(self, report: DriftReport) -> None:
@@ -52,9 +55,13 @@ class LLMQualityChecker(Checker):
             return
         if self.verbose:
             print(f"LLM quality checks ({self.backend_type}, {checker.backend.model})...")
+        threshold = SEVERITY_RANK[self.min_severity]
         for module in self.modules:
+            issues = checker.check_module_quality(module, self.verbose, self.sample_rate)
             report.quality_issues.extend(
-                checker.check_module_quality(module, self.verbose, self.sample_rate)
+                issue
+                for issue in issues
+                if SEVERITY_RANK.get(issue.severity, 99) >= threshold
             )
 
 

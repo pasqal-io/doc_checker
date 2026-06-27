@@ -7,8 +7,19 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from doc_checker.checkers_folder.quality import QualityChecker
-from doc_checker.models import SignatureInfo
+from doc_checker.checkers_folder.quality import LLMQualityChecker, QualityChecker
+from doc_checker.models import DriftReport, QualityIssue, SignatureInfo
+
+
+def _issue(severity: str) -> QualityIssue:
+    return QualityIssue(
+        api_name="m.api",
+        severity=severity,
+        category="clarity",
+        message="msg",
+        suggestion="fix",
+        line_reference=None,
+    )
 
 
 @pytest.fixture
@@ -315,3 +326,43 @@ def test_quality_checker_empty_module(
 
     assert len(issues) == 1
     assert "No public APIs found" in issues[0].message
+
+
+@patch("doc_checker.checkers_folder.quality.QualityChecker")
+def test_llm_quality_checker_filters_below_min_severity(mock_qc_class, tmp_path):
+    """LLMQualityChecker drops issues below min_severity before they reach the report."""
+    inner = MagicMock()
+    inner.backend.model = "fake-model"
+    inner.check_module_quality.return_value = [
+        _issue("suggestion"),
+        _issue("warning"),
+        _issue("critical"),
+    ]
+    mock_qc_class.return_value = inner
+
+    checker = LLMQualityChecker(tmp_path, ["m"], set(), min_severity="warning")
+    report = DriftReport()
+    checker.check(report)
+
+    kept = {i.severity for i in report.quality_issues}
+    assert kept == {"warning", "critical"}
+
+
+@patch("doc_checker.checkers_folder.quality.QualityChecker")
+def test_llm_quality_checker_default_keeps_all(mock_qc_class, tmp_path):
+    """Default min_severity keeps every issue, including unknown severities."""
+    inner = MagicMock()
+    inner.backend.model = "fake-model"
+    inner.check_module_quality.return_value = [
+        _issue("suggestion"),
+        _issue("warning"),
+        _issue("critical"),
+        _issue("mystery"),
+    ]
+    mock_qc_class.return_value = inner
+
+    checker = LLMQualityChecker(tmp_path, ["m"], set())
+    report = DriftReport()
+    checker.check(report)
+
+    assert len(report.quality_issues) == 4
