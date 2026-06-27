@@ -93,11 +93,11 @@ class OllamaBackend(LLMBackend):
 class OpenAIBackend(LLMBackend):
     """OpenAI API backend."""
 
-    def __init__(self, model: str = "gpt-5.2", api_key: str | None = None):
+    def __init__(self, model: str = "gpt-5.5", api_key: str | None = None):
         """Initialize OpenAI backend.
 
         Args:
-            model: Model name (gpt-5.2 recommended)
+            model: Model name (gpt-5.5 recommended)
             api_key: API key (defaults to OPENAI_API_KEY env var)
 
         Raises:
@@ -124,14 +124,23 @@ class OpenAIBackend(LLMBackend):
         self.model = model
 
     def generate(self, prompt: str, temperature: float = 0.1) -> str:
-        """Generate completion via OpenAI."""
-        response = self.client.chat.completions.create(
-            model=self.model,
-            messages=[{"role": "user", "content": prompt}],
-            temperature=temperature,
-            max_completion_tokens=1024,
-        )
-        return response.choices[0].message.content or ""
+        """Generate completion via OpenAI Responses API."""
+        params: dict[str, Any] = {
+            "model": self.model,
+            "input": prompt,
+            "max_output_tokens": 1024,
+            "temperature": temperature,
+        }
+        try:
+            response = self.client.responses.create(**params)
+        except Exception as e:
+            # Some models (e.g. gpt-5.x reasoning) only accept the default
+            # temperature; retry without it.
+            if "temperature" not in str(e):
+                raise
+            params.pop("temperature")
+            response = self.client.responses.create(**params)
+        return response.output_text or ""
 
 
 def get_backend(
@@ -157,6 +166,6 @@ def get_backend(
     if backend_type == "ollama":
         return OllamaBackend(model or "qwen3:1.7b")
     elif backend_type == "openai":
-        return OpenAIBackend(model or "gpt-5.2", api_key)
+        return OpenAIBackend(model or "gpt-5.5", api_key)
     else:
         raise ValueError(f"Unknown backend: {backend_type}. Choose from: ollama, openai")

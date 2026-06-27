@@ -49,10 +49,10 @@ doc-checker --modules my_package --check-basic --root /path/to/project
 # External HTTP link validation only (slow)
 doc-checker --modules my_package --check-external-links --root /path/to/project
 
-# LLM quality checks (default: ollama/qwen3:1.7b, openai/gpt-5.2)
+# LLM quality checks (default: ollama/qwen3:1.7b, openai/gpt-5.5)
 doc-checker --modules my_package --check-quality --root /path/to/project
 doc-checker --modules my_package --check-quality --llm-backend openai --root .
-doc-checker --modules my_package --check-quality --llm-model gpt-5.2 --root .
+doc-checker --modules my_package --check-quality --llm-model gpt-5.5 --root .
 doc-checker --modules my_package --check-quality --quality-sample 0.1 --root .
 
 # Multiple modules

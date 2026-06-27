@@ -91,7 +91,7 @@ class DriftDetector:
             report.llm_backend = quality_backend
             report.llm_model = quality_model or {
                 "ollama": "qwen3:1.7b",
-                "openai": "gpt-5.2",
+                "openai": "gpt-5.5",
             }.get(quality_backend)
         self._warn_unmatched_ignores(report)
         checkers: list[Checker] = []

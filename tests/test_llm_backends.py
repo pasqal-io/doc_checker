@@ -99,7 +99,7 @@ def test_openai_backend_default_model():
     with patch("openai.OpenAI") as mock_openai_class:
         mock_openai_class.return_value = MagicMock()
         backend = OpenAIBackend(api_key="test-key")
-        assert backend.model == "gpt-5.2"
+        assert backend.model == "gpt-5.5"
 
 
 def test_openai_backend_api_key_from_env():
@@ -124,10 +124,42 @@ def test_openai_backend_no_api_key():
             OpenAIBackend(model="gpt-4o")
 
 
-@pytest.mark.skipif(True, reason="Requires openai package - tested via integration")
 def test_openai_backend_generate():
-    """Test OpenAIBackend generates responses."""
-    assert False #this test needs to be inplemented, but wouldn't run without openai.
+    """Test OpenAIBackend generates responses via the Responses API."""
+    with patch("openai.OpenAI") as mock_openai_class:
+        mock_client = MagicMock()
+        mock_client.responses.create.return_value = MagicMock(output_text="hello")
+        mock_openai_class.return_value = mock_client
+
+        backend = OpenAIBackend(model="gpt-5.5", api_key="test-key")
+        result = backend.generate("prompt", temperature=0.1)
+
+        assert result == "hello"
+        mock_client.responses.create.assert_called_once_with(
+            model="gpt-5.5",
+            input="prompt",
+            max_output_tokens=1024,
+            temperature=0.1,
+        )
+
+
+def test_openai_backend_generate_temperature_fallback():
+    """Test generate() retries without temperature when the model rejects it."""
+    with patch("openai.OpenAI") as mock_openai_class:
+        mock_client = MagicMock()
+        mock_client.responses.create.side_effect = [
+            ValueError("Unsupported value: 'temperature' does not support 0.1"),
+            MagicMock(output_text="hello"),
+        ]
+        mock_openai_class.return_value = mock_client
+
+        backend = OpenAIBackend(model="gpt-5.5", api_key="test-key")
+        result = backend.generate("prompt", temperature=0.1)
+
+        assert result == "hello"
+        assert mock_client.responses.create.call_count == 2
+        # Retry omits the temperature parameter.
+        assert "temperature" not in mock_client.responses.create.call_args.kwargs
 
 
 def test_openai_backend_missing_package():
@@ -170,7 +202,7 @@ def test_get_backend_openai(mock_openai_class):
     backend = get_backend(backend_type="openai", api_key="test-key")
 
     assert backend == mock_backend
-    mock_openai_class.assert_called_once_with("gpt-5.2", "test-key")
+    mock_openai_class.assert_called_once_with("gpt-5.5", "test-key")
 
 
 @patch("doc_checker.llm_backends.OpenAIBackend")

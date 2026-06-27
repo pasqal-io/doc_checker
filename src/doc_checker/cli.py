@@ -44,7 +44,7 @@ def main() -> int:
     parser.add_argument(
         "--llm-model",
         type=str,
-        help="LLM model name (defaults: qwen3:1.7b for ollama, gpt-5.2 for openai)",
+        help="LLM model name (defaults: qwen3:1.7b for ollama, gpt-5.5 for openai)",
     )
     parser.add_argument(
         "--quality-sample",
