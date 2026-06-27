@@ -19,6 +19,7 @@ def test_llm_backend_abstract():
     with pytest.raises(TypeError):
         LLMBackend()  # type: ignore
 
+
 def test_ollama_backend_init():
     """Test OllamaBackend initialization."""
     with patch("ollama.list") as mock_list:
@@ -38,7 +39,7 @@ def test_ollama_backend_default_model():
 @pytest.mark.skipif(True, reason="Requires ollama package - tested via integration")
 def test_ollama_backend_generate():
     """Test OllamaBackend generates responses."""
-    assert False #this test needs to be inplemented, but wouldn't run without ollama.
+    assert False  # this test needs to be inplemented, but wouldn't run without ollama.
 
 
 def test_ollama_backend_missing_package():
@@ -50,34 +51,12 @@ def test_ollama_backend_missing_package():
 
 def test_ollama_backend_service_not_running():
     with patch("ollama.list") as mock_list:
+
         def side_effect():
             raise ValueError("Service not running")
+
         mock_list.side_effect = side_effect
         with pytest.raises(RuntimeError, match="service not running"):
-            backend = OllamaBackend()
-    
-def test_ollama_backend_missing_package():
-    """Test that OllamaBackend raises ImportError when ollama package is not installed.
-    
-    This test verifies that the OllamaBackend constructor properly handles the case
-    where the required ollama package is not available in the system. It uses
-    unittest.mock.patch.dict to temporarily remove the ollama module from
-    sys.modules, simulating an environment where the package is not installed.
-    
-    The test expects an ImportError to be raised with a message containing
-    "ollama package required" when attempting to instantiate OllamaBackend
-    without the ollama package available.
-    
-    Returns:
-        None: This is a test function that performs assertions and does not
-        return any value.
-    
-    Raises:
-        AssertionError: If the expected ImportError is not raised or if the
-        error message does not match the expected pattern.
-    """
-    with patch.dict("sys.modules", {"ollama": None}):
-        with pytest.raises(ImportError, match="ollama package required"):
             OllamaBackend()
 
 
@@ -108,7 +87,7 @@ def test_openai_backend_api_key_from_env():
         with patch("os.environ", {"OPENAI_API_KEY": "test-key"}):
             mock_openai_class.return_value = MagicMock()
             backend = OpenAIBackend(model="gpt-4o")
-    
+
             assert backend.model == "gpt-4o"
             assert backend.api_key == "test-key"
             mock_openai_class.assert_called_once_with(api_key="test-key")
@@ -116,8 +95,9 @@ def test_openai_backend_api_key_from_env():
 
 def test_openai_backend_no_api_key():
     """Test OpenAIBackend raises error if no API key provided."""
-    with patch("openai.OpenAI") as mock_openai_class, patch.dict(
-        "os.environ", {}, clear=True
+    with (
+        patch("openai.OpenAI") as mock_openai_class,
+        patch.dict("os.environ", {}, clear=True),
     ):
         mock_openai_class.return_value = MagicMock()
         with pytest.raises(ValueError, match="OpenAI API key required"):
