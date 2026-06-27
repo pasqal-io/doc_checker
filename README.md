@@ -54,6 +54,8 @@ doc-checker --modules my_package --check-quality --root /path/to/project
 doc-checker --modules my_package --check-quality --llm-backend openai --root .
 doc-checker --modules my_package --check-quality --llm-model gpt-5.5 --root .
 doc-checker --modules my_package --check-quality --quality-sample 0.1 --root .
+
+# Quality reports only critical issues by default; widen to see more:
 doc-checker --modules my_package --check-quality --quality-min-severity warning --root .
 
 # Multiple modules

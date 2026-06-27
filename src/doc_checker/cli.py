@@ -55,8 +55,9 @@ def main() -> int:
     parser.add_argument(
         "--quality-min-severity",
         choices=["critical", "warning", "suggestion"],
-        default="suggestion",
-        help="Drop quality issues below this severity (default: suggestion = keep all)",
+        default="critical",
+        help="Minimum severity to report (default: critical; use 'warning' or "
+        "'suggestion' to also see less severe issues)",
     )
     parser.add_argument("--verbose", "-v", action="store_true", help="Verbose output")
     parser.add_argument("--json", action="store_true", help="Output as JSON")

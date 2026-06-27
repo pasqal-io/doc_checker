@@ -110,6 +110,37 @@ def test_quality_checker_check_api_quality_success(
     assert issues[0].line_reference == "test text"
 
 
+@patch("doc_checker.checkers_folder.quality.get_combined_quality_prompt")
+@patch("doc_checker.checkers_folder.quality.get_backend")
+@patch("doc_checker.checkers_folder.quality.CodeAnalyzer")
+def test_quality_checker_forwards_source_excerpt(
+    mock_analyzer_class, mock_get_backend, mock_prompt, tmp_path, mock_backend
+):
+    """check_api_quality passes the API's source excerpt to the prompt builder."""
+    api = SignatureInfo(
+        name="test_func",
+        module="test_module",
+        parameters=["x: int"],
+        return_annotation="bool",
+        docstring="Docstring.",
+        is_public=True,
+        kind="function",
+        source_excerpt="def test_func(x):\n    return x > 0",
+    )
+    analyzer = MagicMock()
+    analyzer.get_public_apis.return_value = [api]
+    mock_analyzer_class.return_value = analyzer
+    mock_get_backend.return_value = mock_backend
+    mock_prompt.return_value = "prompt"
+
+    checker = QualityChecker(tmp_path)
+    checker.check_api_quality("test_func", "test_module")
+
+    assert mock_prompt.call_args.kwargs["code_snippet"] == (
+        "def test_func(x):\n    return x > 0"
+    )
+
+
 @patch("doc_checker.checkers_folder.quality.get_backend")
 @patch("doc_checker.checkers_folder.quality.CodeAnalyzer")
 def test_quality_checker_api_not_found(

@@ -46,13 +46,14 @@ Docstring:
 
 Check ALL of:
 1. **English Quality**: grammar, spelling, clarity, style
-2. **Code Alignment**: docstring matches the signature
-3. **Completeness**: all parameters, returns, exceptions documented
-4. **Technical Accuracy**: correct terminology, accurate descriptions
+2. **Code Alignment**: docstring matches the signature AND the code implementation shown
+3. **Input Variables**: every parameter in the signature is documented; names, types, and defaults match the signature; and each description matches how the parameter is actually used in the code (flag undocumented, renamed, mistyped, or wrongly-described parameters)
+4. **Completeness**: all parameters, returns, raised exceptions documented
+5. **Technical Accuracy**: correct terminology, accurate descriptions
 
 CRITICAL: Use simple, clear language. Provide concrete before/after examples for every issue.
 
-GROUNDING: Base every issue and fix ONLY on the signature and docstring shown above (and the code excerpt if one is given). If a correct fix would require knowing runtime behavior, default values, or parent-class semantics that are NOT shown here, say so in the message and keep the suggestion tentative. Never assert behavior you cannot see.
+GROUNDING: Base every issue and fix ONLY on the signature, docstring, and code excerpt shown above. The code excerpt may be truncated; if a correct fix would require knowing runtime behavior, default values, or parent-class semantics that are NOT shown here, say so in the message and keep the suggestion tentative. Never assert behavior you cannot see.
 
 Respond ONLY with valid JSON (no markdown):
 {{

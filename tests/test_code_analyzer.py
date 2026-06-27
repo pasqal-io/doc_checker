@@ -98,6 +98,24 @@ class TestCodeAnalyzer:
         assert "int" in func_api.return_annotation
         assert func_api.docstring == "A public function."
 
+    def test_function_source_excerpt(self, sample_module: ModuleType, tmp_path: Path):
+        analyzer = CodeAnalyzer(tmp_path)
+        apis = analyzer.get_public_apis("test_module")
+
+        func_api = next(api for api in apis if api.name == "public_function")
+        assert func_api.source_excerpt is not None
+        assert "return x + y" in func_api.source_excerpt
+
+    def test_class_source_excerpt_prefers_init(
+        self, sample_module: ModuleType, tmp_path: Path
+    ):
+        analyzer = CodeAnalyzer(tmp_path)
+        apis = analyzer.get_public_apis("test_module")
+
+        class_api = next(api for api in apis if api.name == "PublicClass")
+        assert class_api.source_excerpt is not None
+        assert "self.param1 = param1" in class_api.source_excerpt
+
     def test_parameter_formatting(self, sample_module: ModuleType, tmp_path: Path):
         analyzer = CodeAnalyzer(tmp_path)
         apis = analyzer.get_public_apis("test_module")

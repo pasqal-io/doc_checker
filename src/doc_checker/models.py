@@ -47,6 +47,8 @@ class SignatureInfo:
         docstring: The object's docstring (via inspect.getdoc), or None if missing.
         is_public: True if name doesn't start with underscore.
         kind: One of "function", "method", or "class".
+        source_excerpt: First lines of the object's source (for code-vs-docstring
+            alignment), or None if the source could not be read.
     """
 
     name: str
@@ -56,6 +58,7 @@ class SignatureInfo:
     docstring: str | None
     is_public: bool
     kind: str
+    source_excerpt: str | None = None
 
 
 @dataclass

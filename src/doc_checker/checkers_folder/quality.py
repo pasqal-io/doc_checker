@@ -150,6 +150,7 @@ class QualityChecker:
             signature=signature,
             docstring=api_info.docstring,
             api_name=f"{module_name}.{api_name}",
+            code_snippet=api_info.source_excerpt,
         )
 
         try:

@@ -10,6 +10,10 @@ from typing import Any
 
 from doc_checker.models import SignatureInfo
 
+# Max lines of source sent to the LLM for code-vs-docstring alignment. Bounds
+# input tokens; the docstring + signature already carry the public contract.
+MAX_SOURCE_LINES = 25
+
 
 class CodeAnalyzer:
     """Extract public APIs from Python modules via importlib/inspect introspection.
@@ -198,6 +202,7 @@ class CodeAnalyzer:
             docstring=inspect.getdoc(cls),
             is_public=not name.startswith("_"),
             kind="class",
+            source_excerpt=self._get_source_excerpt(cls),
         )
 
     def _extract_function_signature(
@@ -235,7 +240,29 @@ class CodeAnalyzer:
             docstring=inspect.getdoc(func),
             is_public=not name.startswith("_"),
             kind="function",
+            source_excerpt=self._get_source_excerpt(func),
         )
+
+    def _get_source_excerpt(self, obj: Any) -> str | None:
+        """Return the first lines of obj's source, or None if unavailable.
+
+        For classes, prefers the class's own ``__init__`` since documented
+        parameters come from it; falls back to the class body otherwise.
+        """
+        target = obj
+        if inspect.isclass(obj):
+            init = obj.__dict__.get("__init__")
+            if inspect.isfunction(init):
+                target = init
+        try:
+            source = inspect.getsource(target)
+        except (OSError, TypeError):
+            return None
+        lines = source.splitlines()
+        excerpt = "\n".join(lines[:MAX_SOURCE_LINES])
+        if len(lines) > MAX_SOURCE_LINES:
+            excerpt += "\n    # ... (truncated)"
+        return excerpt
 
     def _format_param(self, param: inspect.Parameter) -> str:
         """Format parameter for display."""
