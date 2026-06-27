@@ -92,6 +92,6 @@ Incomplete description:
 }}
 
 Severity guide:
-- critical: Wrong info, missing required docs, major grammar errors
+- critical: Wrong info, code/docstring contradictions, undocumented or mismatched parameters (name, type, or default differs from the signature), missing required docs, major grammar errors
 - warning: Unclear phrasing, minor inconsistencies, missing nice-to-haves
 - suggestion: Style improvements, additional examples"""

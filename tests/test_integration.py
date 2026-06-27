@@ -217,7 +217,11 @@ def test_integration_with_quality_checks_mocked(integration_project: Path):
         "doc_checker.checkers_folder.quality.QualityChecker"
     ) as mock_checker_class:
         mock_checker_class.return_value = mock_checker
-        report = detector.check_all(check_quality=True, verbose=False)
+        report = detector.check_all(
+            check_quality=True,
+            quality_min_severity="suggestion",
+            verbose=False,
+        )
 
     assert len(report.quality_issues) == 2
     assert report.has_issues() is True

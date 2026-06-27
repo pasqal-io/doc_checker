@@ -64,7 +64,7 @@ class DriftDetector:
         quality_model: str | None = None,
         quality_api_key: str | None = None,
         quality_sample_rate: float = 1.0,
-        quality_min_severity: str = "suggestion",
+        quality_min_severity: str = "critical",
         verbose: bool = False,
         skip_basic_checks: bool = False,
     ) -> DriftReport:
@@ -82,7 +82,8 @@ class DriftDetector:
             quality_api_key: API key for openai backend.
             quality_sample_rate: Fraction of APIs to check (0.0-1.0).
             quality_min_severity: Drop quality issues below this severity
-                ("suggestion", "warning", or "critical").
+                ("suggestion", "warning", or "critical"). Default "critical"
+                reports only the most important issues.
             verbose: Print progress info.
             skip_basic_checks: Skip basic checks (for standalone link/quality runs).
 

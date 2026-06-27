@@ -192,7 +192,7 @@ def test_quality_checker_llm_failure(
     issues = checker.check_api_quality("test_func", "test_module")
 
     assert len(issues) == 1
-    assert issues[0].severity == "warning"
+    assert issues[0].severity == "critical"
     assert issues[0].category == "error"
     assert "LLM check failed" in issues[0].message
 
@@ -217,7 +217,6 @@ def test_quality_checker_verbose_output(
     captured = capsys.readouterr()
     assert "Checking test_module.test_func" in captured.out
     assert "Found 1 issues" in captured.out
-    assert "score: 85" in captured.out
 
 
 @patch("doc_checker.checkers_folder.quality.get_backend")
@@ -380,8 +379,8 @@ def test_llm_quality_checker_filters_below_min_severity(mock_qc_class, tmp_path)
 
 
 @patch("doc_checker.checkers_folder.quality.QualityChecker")
-def test_llm_quality_checker_default_keeps_all(mock_qc_class, tmp_path):
-    """Default min_severity keeps every issue, including unknown severities."""
+def test_llm_quality_checker_default_keeps_only_critical(mock_qc_class, tmp_path):
+    """Default min_severity is critical; lower severities are dropped, unknown kept."""
     inner = MagicMock()
     inner.backend.model = "fake-model"
     inner.check_module_quality.return_value = [
@@ -396,4 +395,5 @@ def test_llm_quality_checker_default_keeps_all(mock_qc_class, tmp_path):
     report = DriftReport()
     checker.check(report)
 
-    assert len(report.quality_issues) == 4
+    kept = {i.severity for i in report.quality_issues}
+    assert kept == {"critical", "mystery"}
