@@ -124,22 +124,16 @@ class OpenAIBackend(LLMBackend):
         self.model = model
 
     def generate(self, prompt: str, temperature: float = 0.1) -> str:
-        """Generate completion via OpenAI Responses API."""
-        params: dict[str, Any] = {
-            "model": self.model,
-            "input": prompt,
-            "max_output_tokens": 1024,
-            "temperature": temperature,
-        }
-        try:
-            response = self.client.responses.create(**params)
-        except Exception as e:
-            # Some models (e.g. gpt-5.x reasoning) only accept the default
-            # temperature; retry without it.
-            if "temperature" not in str(e):
-                raise
-            params.pop("temperature")
-            response = self.client.responses.create(**params)
+        """Generate completion via OpenAI Responses API.
+
+        ``temperature`` is kept for interface compatibility but not forwarded:
+        gpt-5.x reasoning models only accept the default value.
+        """
+        response = self.client.responses.create(
+            model=self.model,
+            input=prompt,
+            max_output_tokens=16384,
+        )
         return response.output_text or ""
 
 

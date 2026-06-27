@@ -118,28 +118,8 @@ def test_openai_backend_generate():
         mock_client.responses.create.assert_called_once_with(
             model="gpt-5.5",
             input="prompt",
-            max_output_tokens=1024,
-            temperature=0.1,
+            max_output_tokens=16384,
         )
-
-
-def test_openai_backend_generate_temperature_fallback():
-    """Test generate() retries without temperature when the model rejects it."""
-    with patch("openai.OpenAI") as mock_openai_class:
-        mock_client = MagicMock()
-        mock_client.responses.create.side_effect = [
-            ValueError("Unsupported value: 'temperature' does not support 0.1"),
-            MagicMock(output_text="hello"),
-        ]
-        mock_openai_class.return_value = mock_client
-
-        backend = OpenAIBackend(model="gpt-5.5", api_key="test-key")
-        result = backend.generate("prompt", temperature=0.1)
-
-        assert result == "hello"
-        assert mock_client.responses.create.call_count == 2
-        # Retry omits the temperature parameter.
-        assert "temperature" not in mock_client.responses.create.call_args.kwargs
 
 
 def test_openai_backend_missing_package():

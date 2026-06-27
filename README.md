@@ -74,6 +74,12 @@ doc-checker --modules my_package --check-basic --warn-only --root /path/to/proje
 doc-checker --modules my_package --check-basic -v --root /path/to/project
 ```
 
+> **OpenAI backend: gpt-5.x only.** The `openai` backend targets the gpt-5.x
+> reasoning models (default `gpt-5.5`) via the Responses API. These models only
+> accept the default `temperature`, so the backend does not send a `temperature`
+> parameter. Pointing `--llm-model` at older non-reasoning chat models
+> (e.g. `gpt-4o`) is unsupported. For local models use the `ollama` backend.
+
 ## Pre-commit Hook
 
 Add to your `.pre-commit-config.yaml`:
