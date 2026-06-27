@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import enum
 import importlib
 import inspect
 import pkgutil
 from pathlib import Path
 from typing import Any
 
+from doc_checker.constants import IGNORE_PARAMS
 from doc_checker.models import SignatureInfo
 
 # Max lines of source sent to the LLM for code-vs-docstring alignment. Bounds
@@ -187,12 +189,18 @@ class CodeAnalyzer:
         """
         params: list[str] = []
         signature: str | None = None
+        # Enum subclasses expose the enum machinery constructor (value, names,
+        # module, qualname, ...) — not real user-facing params. Drop those.
+        is_enum = issubclass(cls, enum.Enum)
         try:
             sig = inspect.signature(cls)
-            params = [
-                self._format_param(p) for p in sig.parameters.values() if p.name != "self"
+            visible = [
+                p
+                for p in sig.parameters.values()
+                if p.name != "self" and not (is_enum and p.name in IGNORE_PARAMS)
             ]
-            signature = str(sig)
+            params = [self._format_param(p) for p in visible]
+            signature = str(sig.replace(parameters=visible))
         except (ValueError, TypeError):
             pass
 

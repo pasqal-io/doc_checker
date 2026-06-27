@@ -116,6 +116,31 @@ class TestCodeAnalyzer:
         assert class_api.source_excerpt is not None
         assert "self.param1 = param1" in class_api.source_excerpt
 
+    def test_enum_signature_drops_machinery_params(self, tmp_path: Path):
+        """Enum signatures exclude the value/names/module/... machinery params."""
+        module_dir = tmp_path / "enum_module"
+        module_dir.mkdir()
+        (module_dir / "__init__.py").write_text(
+            "import enum\n"
+            '__all__ = ["Color"]\n'
+            "class Color(enum.Enum):\n"
+            '    """Colors."""\n'
+            "    RED = 1\n"
+            "    GREEN = 2\n"
+        )
+        sys.path.insert(0, str(tmp_path))
+        try:
+            analyzer = CodeAnalyzer(tmp_path)
+            api = next(
+                a for a in analyzer.get_public_apis("enum_module") if a.name == "Color"
+            )
+            assert api.signature is not None
+            for junk in ("value", "names", "module", "qualname"):
+                assert junk not in api.signature
+            assert api.parameters == []
+        finally:
+            sys.modules.pop("enum_module", None)
+
     def test_signature_is_faithful(self, tmp_path: Path):
         """signature preserves the keyword-only '*' marker and annotations."""
         module_dir = tmp_path / "sig_module"
