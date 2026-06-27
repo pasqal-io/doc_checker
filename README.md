@@ -13,7 +13,7 @@ Check documentation drift: broken links, undocumented APIs, invalid references.
 - **Docstring Links**: Validate links embedded in Python docstrings
 - **Parameter Docs**: Check function parameters mentioned in docstrings
 - **mkdocs.yml Validation**: Verify nav paths exist
-- **LLM Quality Checks**: Evaluate docstring quality (english, code-alignment, completeness)
+- **LLM Quality Checks**: Evaluate docstring quality — English, completeness, and code alignment. The model is shown the signature, docstring, and a short source excerpt, and flags code/docstring contradictions and mismatched or undocumented parameters. Reports only `critical` issues by default (see below)
 
 ## Installation
 
@@ -82,6 +82,21 @@ doc-checker --modules my_package --check-basic -v --root /path/to/project
 > accept the default `temperature`, so the backend does not send a `temperature`
 > parameter. Pointing `--llm-model` at older non-reasoning chat models
 > (e.g. `gpt-4o`) is unsupported. For local models use the `ollama` backend.
+
+### Quality severity
+
+Every quality issue the model returns is rated `critical`, `warning`, or
+`suggestion`. `--quality-min-severity` drops everything below the threshold
+*before* it reaches the report, so it also affects the exit code.
+
+- **Default is `critical`** — only the most important issues (code/docstring
+  contradictions, mismatched or undocumented parameters, missing docstrings,
+  wrong info). Most runs stay quiet.
+- Use `--quality-min-severity warning` or `suggestion` to also see clarity and
+  style feedback.
+
+Structural failures (missing docstring, LLM/backend error, no public APIs found)
+are always emitted as `critical`, so a broken backend can never look "clean".
 
 ## Pre-commit Hook
 
