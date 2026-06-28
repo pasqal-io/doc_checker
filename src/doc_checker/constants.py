@@ -14,6 +14,7 @@ PULSER_REEXPORTS = {  # TODO: make configurable via CLI
 
 IGNORE_PARAMS = {
     "value",
+    "values",
     "names",
     "module",
     "qualname",
