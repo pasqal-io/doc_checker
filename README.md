@@ -113,6 +113,16 @@ manually. Failed/empty responses are never cached, so a later run retries them.
 The cache lives in `$XDG_CACHE_HOME/doc_checker` (or `~/.cache/doc_checker`).
 Pass `--no-cache` to bypass it and always query the model.
 
+### Stochastic results
+
+Each API is checked with an independent LLM call, capped at the few most
+important issues, so results are **non-deterministic across runs**: precision is
+high (few false positives), but a single run may not surface *every* real issue —
+different runs can catch different ones. The cache amplifies this by freezing a
+run's findings (including whatever it missed) until the model or prompt inputs
+change. For a more exhaustive audit, run with `--no-cache` a few times and
+combine the results rather than trusting one run to be complete.
+
 ## Pre-commit Hook
 
 Add to your `.pre-commit-config.yaml`:
