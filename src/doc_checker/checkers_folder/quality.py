@@ -31,7 +31,7 @@ class LLMQualityChecker(Checker):
         sample_rate: float = 1.0,
         min_severity: str = "critical",
         verbose: bool = False,
-        use_cache: bool = True,
+        use_cache: bool = False,
     ):
         self.root_path = root_path
         self.modules = modules
