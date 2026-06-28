@@ -58,6 +58,9 @@ doc-checker --modules my_package --check-quality --quality-sample 0.1 --root .
 # Quality reports only critical issues by default; widen to see more:
 doc-checker --modules my_package --check-quality --quality-min-severity warning --root .
 
+# Force fresh LLM queries (bypass the response cache)
+doc-checker --modules my_package --check-quality --no-cache --root .
+
 # Multiple modules
 doc-checker --modules my_package other_pkg --root /path/to/project
 
@@ -95,8 +98,20 @@ Every quality issue the model returns is rated `critical`, `warning`, or
 - Use `--quality-min-severity warning` or `suggestion` to also see clarity and
   style feedback.
 
-Structural failures (missing docstring, LLM/backend error, no public APIs found)
-are always emitted as `critical`, so a broken backend can never look "clean".
+Structural failures (missing docstring, LLM/backend error, no public APIs found,
+or an unparseable/empty model response) are always emitted as `critical`, so a
+broken backend can never look "clean".
+
+### Response caching
+
+LLM quality responses are cached on disk so re-running on an unchanged codebase
+doesn't re-pay for the same API calls. Entries are keyed by a hash of the model
+plus the full prompt (signature, docstring, and source excerpt), so the cache
+self-invalidates whenever any of those change — there's nothing to invalidate
+manually. Failed/empty responses are never cached, so a later run retries them.
+
+The cache lives in `$XDG_CACHE_HOME/doc_checker` (or `~/.cache/doc_checker`).
+Pass `--no-cache` to bypass it and always query the model.
 
 ## Pre-commit Hook
 
@@ -145,6 +160,7 @@ CLI -> DriftDetector -> checkers_folder/ -> DriftReport -> formatters
 - `utils/link_checker.py` - Async HTTP validation (aiohttp or urllib fallback)
 - `llm_backends.py` - OllamaBackend / OpenAIBackend abstraction
 - `prompts.py` - LLM prompt templates
+- `cache.py` - On-disk cache for LLM quality responses (`ResponseCache`)
 - `models.py` - Dataclasses (SignatureInfo, DocReference, DriftReport, etc.)
 - `formatters.py` - Report rendering (text/JSON)
 - `cli.py` - Command-line interface

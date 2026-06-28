@@ -48,7 +48,8 @@ class SignatureInfo:
         is_public: True if name doesn't start with underscore.
         kind: One of "function", "method", or "class".
         source_excerpt: First lines of the object's source (for code-vs-docstring
-            alignment), or None if the source could not be read.
+            alignment), or None. Not populated during discovery; fetched on
+            demand via CodeAnalyzer.get_source_excerpt by the quality checker.
         signature: Faithful rendering of the call signature via inspect.signature
             (preserves "*", keyword-only markers, and full annotations), e.g.
             "(mps_site: int, *, evaluation_times: Sequence[float] | None = None)".

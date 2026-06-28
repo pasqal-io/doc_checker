@@ -65,6 +65,7 @@ class DriftDetector:
         quality_api_key: str | None = None,
         quality_sample_rate: float = 1.0,
         quality_min_severity: str = "critical",
+        quality_use_cache: bool = True,
         verbose: bool = False,
         skip_basic_checks: bool = False,
     ) -> DriftReport:
@@ -84,6 +85,7 @@ class DriftDetector:
             quality_min_severity: Drop quality issues below this severity
                 ("suggestion", "warning", or "critical"). Default "critical"
                 reports only the most important issues.
+            quality_use_cache: Reuse cached LLM responses for unchanged APIs.
             verbose: Print progress info.
             skip_basic_checks: Skip basic checks (for standalone link/quality runs).
 
@@ -144,6 +146,7 @@ class DriftDetector:
                     quality_sample_rate,
                     quality_min_severity,
                     verbose,
+                    quality_use_cache,
                 )
             )
         for checker in checkers:

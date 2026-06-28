@@ -212,7 +212,6 @@ class CodeAnalyzer:
             docstring=inspect.getdoc(cls),
             is_public=not name.startswith("_"),
             kind="class",
-            source_excerpt=self._get_source_excerpt(cls),
             signature=signature,
         )
 
@@ -253,9 +252,22 @@ class CodeAnalyzer:
             docstring=inspect.getdoc(func),
             is_public=not name.startswith("_"),
             kind="function",
-            source_excerpt=self._get_source_excerpt(func),
             signature=signature,
         )
+
+    def get_source_excerpt(self, module_name: str, name: str) -> str | None:
+        """Return a source excerpt for a public API, or None if unavailable.
+
+        Resolved on demand (not during API discovery) so only callers that
+        need source — currently the LLM quality checker — pay the
+        ``inspect.getsource`` cost, and only for the APIs they actually use.
+        """
+        try:
+            module = importlib.import_module(module_name)
+            obj = getattr(module, name)
+        except (ImportError, SyntaxError, AttributeError):
+            return None
+        return self._get_source_excerpt(obj)
 
     def _get_source_excerpt(self, obj: Any) -> str | None:
         """Return the first lines of obj's source, or None if unavailable.

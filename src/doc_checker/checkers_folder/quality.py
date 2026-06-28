@@ -3,6 +3,7 @@ from __future__ import annotations
 import random
 from pathlib import Path
 
+from doc_checker.cache import ResponseCache, default_cache_dir
 from doc_checker.constants import SEVERITY_RANK
 from doc_checker.llm_backends import get_backend
 from doc_checker.models import DriftReport, QualityIssue, SignatureInfo
@@ -30,6 +31,7 @@ class LLMQualityChecker(Checker):
         sample_rate: float = 1.0,
         min_severity: str = "critical",
         verbose: bool = False,
+        use_cache: bool = True,
     ):
         self.root_path = root_path
         self.modules = modules
@@ -40,6 +42,7 @@ class LLMQualityChecker(Checker):
         self.sample_rate = sample_rate
         self.min_severity = min_severity
         self.verbose = verbose
+        self.use_cache = use_cache
 
     def check(self, report: DriftReport) -> None:
         """Run LLM quality checks; skip with warning if deps missing."""
@@ -50,6 +53,7 @@ class LLMQualityChecker(Checker):
                 self.model,
                 self.api_key,
                 ignore_submodules=self.ignore_submodules,
+                cache=ResponseCache(default_cache_dir(), enabled=self.use_cache),
             )
         except (ImportError, RuntimeError, ValueError) as e:
             report.warnings.append(f"Quality checks skipped: {e}")
@@ -76,6 +80,7 @@ class QualityChecker:
         model: str | None = None,
         api_key: str | None = None,
         ignore_submodules: set[str] | None = None,
+        cache: ResponseCache | None = None,
     ):
         """Initialize quality checker.
 
@@ -85,6 +90,7 @@ class QualityChecker:
             model: Model name (uses defaults if None)
             api_key: API key for cloud backends
             ignore_submodules: Submodule names to skip.
+            cache: Optional response cache; None disables caching.
 
         Raises:
             ImportError: If backend package not installed
@@ -94,6 +100,7 @@ class QualityChecker:
         self.code_analyzer = CodeAnalyzer(root_path)
         self.backend = get_backend(backend_type, model, api_key)
         self.ignore_submodules = ignore_submodules
+        self.cache = cache
 
     def check_api_quality(
         self, api_name: str, module_name: str, verbose: bool = False
@@ -166,24 +173,55 @@ class QualityChecker:
         if verbose:
             print(f"  Checking {display_name}...")
 
+        # Source is fetched on demand (not during discovery) so only APIs that
+        # reach the LLM — already deduped by check_module_quality — pay the
+        # inspect.getsource cost. A pre-set excerpt (e.g. in tests) wins.
+        code_snippet = api_info.source_excerpt or self.code_analyzer.get_source_excerpt(
+            api_info.module, api_info.name
+        )
+
         # Get LLM evaluation
         prompt = get_combined_quality_prompt(
             signature=signature,
             docstring=api_info.docstring,
             api_name=display_name,
-            code_snippet=api_info.source_excerpt,
+            code_snippet=code_snippet,
         )
 
-        try:
-            response = self.backend.generate_json(prompt)
-        except Exception as e:
+        # Reuse a cached response when available; otherwise call the backend and
+        # cache the result. Errors are never cached, so a later run can retry.
+        cache_key = (
+            ResponseCache.make_key(self.backend.model, prompt) if self.cache else None
+        )
+        response = self.cache.get(cache_key) if (self.cache and cache_key) else None
+        if response is None:
+            try:
+                response = self.backend.generate_json(prompt)
+            except Exception as e:
+                return [
+                    QualityIssue(
+                        api_name=display_name,
+                        severity="critical",
+                        category="error",
+                        message=f"LLM check failed: {e}",
+                        suggestion="Check LLM backend connection",
+                        line_reference=None,
+                    )
+                ]
+            if self.cache and cache_key and not response.get("error"):
+                self.cache.set(cache_key, response)
+
+        # A returned-but-unparseable (or empty) response carries an "error" key
+        # and no issues. Surface it as critical instead of silently reporting a
+        # clean API — e.g. when a reasoning model spends its whole token budget.
+        if response.get("error"):
             return [
                 QualityIssue(
                     api_name=display_name,
                     severity="critical",
                     category="error",
-                    message=f"LLM check failed: {e}",
-                    suggestion="Check LLM backend connection",
+                    message=f"LLM response could not be parsed: {response['error']}",
+                    suggestion="Model returned malformed or empty output; re-run",
                     line_reference=None,
                 )
             ]

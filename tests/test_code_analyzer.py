@@ -100,21 +100,25 @@ class TestCodeAnalyzer:
 
     def test_function_source_excerpt(self, sample_module: ModuleType, tmp_path: Path):
         analyzer = CodeAnalyzer(tmp_path)
-        apis = analyzer.get_public_apis("test_module")
-
-        func_api = next(api for api in apis if api.name == "public_function")
-        assert func_api.source_excerpt is not None
-        assert "return x + y" in func_api.source_excerpt
+        excerpt = analyzer.get_source_excerpt("test_module", "public_function")
+        assert excerpt is not None
+        assert "return x + y" in excerpt
 
     def test_class_source_excerpt_prefers_init(
         self, sample_module: ModuleType, tmp_path: Path
     ):
         analyzer = CodeAnalyzer(tmp_path)
-        apis = analyzer.get_public_apis("test_module")
+        excerpt = analyzer.get_source_excerpt("test_module", "PublicClass")
+        assert excerpt is not None
+        assert "self.param1 = param1" in excerpt
 
-        class_api = next(api for api in apis if api.name == "PublicClass")
-        assert class_api.source_excerpt is not None
-        assert "self.param1 = param1" in class_api.source_excerpt
+    def test_source_excerpt_not_populated_during_discovery(
+        self, sample_module: ModuleType, tmp_path: Path
+    ):
+        """Discovery skips source extraction; it is fetched on demand only."""
+        analyzer = CodeAnalyzer(tmp_path)
+        apis = analyzer.get_public_apis("test_module")
+        assert all(api.source_excerpt is None for api in apis)
 
     def test_enum_signature_drops_machinery_params(self, tmp_path: Path):
         """Enum signatures exclude the value/names/module/... machinery params."""
