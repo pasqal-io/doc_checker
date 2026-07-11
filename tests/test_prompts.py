@@ -98,10 +98,11 @@ def test_combined_quality_prompt_omits_score():
 
 
 def test_combined_quality_prompt_caps_issue_count():
-    """Test prompt caps the number of reported issues."""
+    """Prompt caps low-severity noise but never drops critical issues."""
     prompt = get_combined_quality_prompt("def f() -> None", "Test", "module.f")
 
-    assert "at most the 3 most important issues" in prompt
+    assert "EVERY critical issue" in prompt
+    assert "warning- and suggestion-level issues, report only the few" in prompt
 
 
 def test_combined_quality_prompt_trusts_signature():

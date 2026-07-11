@@ -53,10 +53,15 @@ class ResponseCache:
             return None
         try:
             with self._path(key).open(encoding="utf-8") as f:
-                result: dict[str, Any] = json.load(f)
-                return result
+                result: Any = json.load(f)
         except (OSError, json.JSONDecodeError):
             return None
+        # A corrupted or foreign cache file may hold valid JSON that isn't an
+        # object (list/str/number); treat that as a miss rather than handing the
+        # caller a value it will .get() on and crash.
+        if not isinstance(result, dict):
+            return None
+        return result
 
     def set(self, key: str, value: dict[str, Any]) -> None:
         """Store a response for key. No-op if disabled; errors are swallowed."""

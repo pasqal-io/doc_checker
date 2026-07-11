@@ -68,6 +68,9 @@ def mock_code_analyzer(tmp_path: Path):
     ]
     analyzer.get_public_apis.return_value = apis
     analyzer.get_all_public_apis.return_value = (apis, set())
+    # Fall back to content-based dedup (distinct names stay distinct) instead of
+    # a shared MagicMock identity that would collapse all APIs into one.
+    analyzer.get_canonical_key.return_value = None
     return analyzer
 
 
@@ -327,6 +330,7 @@ def test_quality_checker_sample_rate(
     mock_analyzer = MagicMock()
     mock_analyzer.get_public_apis.return_value = apis
     mock_analyzer.get_all_public_apis.return_value = (apis, set())
+    mock_analyzer.get_canonical_key.return_value = None
     mock_analyzer_class.return_value = mock_analyzer
     mock_get_backend.return_value = mock_backend
 
@@ -336,6 +340,75 @@ def test_quality_checker_sample_rate(
     # Should check ~3 APIs (30% of 10)
     # Each API generates 1 issue, so ~3 issues
     assert 1 <= len(issues) <= 5  # Allow some variance due to random sampling
+
+
+@patch("doc_checker.checkers_folder.quality.get_backend")
+@patch("doc_checker.checkers_folder.quality.CodeAnalyzer")
+def test_quality_checker_dedup_uses_canonical_identity(
+    mock_analyzer_class, mock_get_backend, tmp_path, mock_backend
+):
+    """Distinct objects sharing name/params/docstring are both checked; a true
+    re-export (same canonical identity) collapses to one."""
+
+    def api(module: str) -> SignatureInfo:
+        # Identical contract across all three, so content-based dedup would
+        # wrongly merge them; only canonical identity keeps the distinct ones.
+        return SignatureInfo(
+            name="Writer",
+            module=module,
+            parameters=["self"],
+            return_annotation=None,
+            docstring="Initialize.",
+            is_public=True,
+            kind="class",
+        )
+
+    apis = [api("pkg.io"), api("pkg.plot"), api("pkg")]  # last re-exports pkg.io
+    mock_analyzer = MagicMock()
+    mock_analyzer.get_all_public_apis.return_value = (apis, set())
+    mock_analyzer.get_canonical_key.side_effect = lambda module, name: {
+        "pkg.io": ("pkg.io", "Writer"),
+        "pkg.plot": ("pkg.plot", "Writer"),
+        "pkg": ("pkg.io", "Writer"),  # re-export resolves to pkg.io's object
+    }[module]
+    mock_analyzer_class.return_value = mock_analyzer
+    mock_get_backend.return_value = mock_backend
+
+    checker = QualityChecker(tmp_path)
+    issues = checker.check_module_quality("pkg", verbose=False)
+
+    # Two distinct Writers checked (io + plot); the pkg re-export merged into io.
+    assert len(issues) == 2
+
+
+@patch("doc_checker.checkers_folder.quality.get_backend")
+@patch("doc_checker.checkers_folder.quality.CodeAnalyzer")
+def test_quality_checker_sample_rate_small_module_checks_at_least_one(
+    mock_analyzer_class, mock_get_backend, tmp_path, mock_backend
+):
+    """A tiny module with a positive sample_rate must not sample zero APIs."""
+    apis = [
+        SignatureInfo(
+            name="only_func",
+            module="test_module",
+            parameters=[],
+            return_annotation=None,
+            docstring="Only function.",
+            is_public=True,
+            kind="function",
+        )
+    ]
+    mock_analyzer = MagicMock()
+    mock_analyzer.get_all_public_apis.return_value = (apis, set())
+    mock_analyzer.get_canonical_key.return_value = None
+    mock_analyzer_class.return_value = mock_analyzer
+    mock_get_backend.return_value = mock_backend
+
+    checker = QualityChecker(tmp_path)
+    # int(1 * 0.1) == 0 would silently check nothing; ceil+max(1, ...) checks one.
+    issues = checker.check_module_quality("test_module", verbose=False, sample_rate=0.1)
+
+    assert len(issues) == 1
 
 
 @patch("doc_checker.checkers_folder.quality.get_backend")
@@ -463,3 +536,9 @@ def test_llm_quality_checker_default_keeps_only_critical(mock_qc_class, tmp_path
 
     kept = {i.severity for i in report.quality_issues}
     assert kept == {"critical", "mystery"}
+
+
+def test_llm_quality_checker_rejects_invalid_min_severity(tmp_path):
+    """An invalid min_severity fails fast with a clear error, not a later KeyError."""
+    with pytest.raises(ValueError, match="Invalid min_severity"):
+        LLMQualityChecker(tmp_path, ["m"], set(), min_severity="warn")

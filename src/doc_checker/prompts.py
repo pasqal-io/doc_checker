@@ -55,7 +55,7 @@ CRITICAL: Use simple, clear language. Provide concrete before/after examples for
 
 GROUNDING: Base every issue and fix ONLY on the signature, docstring, and code excerpt shown above. The code excerpt may be truncated; if a correct fix would require knowing runtime behavior, default values, or parent-class semantics that are NOT shown here, say so in the message and keep the suggestion tentative. Never assert behavior you cannot see. The signature is rendered faithfully from the code, so do NOT report mismatches between the signature and the implementation.
 
-LIMIT: Report at most the 3 most important issues. If there are more, keep the highest-severity ones and omit the rest.
+LIMIT: Report EVERY critical issue you find (never omit a critical one). For warning- and suggestion-level issues, report only the few most important and omit the rest to keep the response focused.
 
 Respond ONLY with valid JSON (no markdown):
 {{

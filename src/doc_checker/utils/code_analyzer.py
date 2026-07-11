@@ -9,7 +9,7 @@ import pkgutil
 from pathlib import Path
 from typing import Any
 
-from doc_checker.constants import IGNORE_PARAMS
+from doc_checker.constants import ENUM_IGNORE_PARAMS
 from doc_checker.models import SignatureInfo
 
 # Max lines of source sent to the LLM for code-vs-docstring alignment. Bounds
@@ -197,7 +197,7 @@ class CodeAnalyzer:
             visible = [
                 p
                 for p in sig.parameters.values()
-                if p.name != "self" and not (is_enum and p.name in IGNORE_PARAMS)
+                if p.name != "self" and not (is_enum and p.name in ENUM_IGNORE_PARAMS)
             ]
             params = [self._format_param(p) for p in visible]
             signature = str(sig.replace(parameters=visible))
@@ -254,6 +254,26 @@ class CodeAnalyzer:
             kind="function",
             signature=signature,
         )
+
+    def get_canonical_key(self, module_name: str, name: str) -> tuple[str, str] | None:
+        """Return ``(defining_module, qualname)`` identifying the underlying object.
+
+        Re-exports of the same object (discovered via different import paths)
+        resolve to the same key, so they can be collapsed, while genuinely
+        distinct same-named objects get distinct keys and are not merged.
+        Returns None if the object can't be resolved or lacks identity metadata,
+        so callers should fall back to a content-based key.
+        """
+        try:
+            module = importlib.import_module(module_name)
+            obj = getattr(module, name)
+        except (ImportError, SyntaxError, AttributeError):
+            return None
+        mod = getattr(obj, "__module__", None)
+        qual = getattr(obj, "__qualname__", None)
+        if not isinstance(mod, str) or not isinstance(qual, str):
+            return None
+        return (mod, qual)
 
     def get_source_excerpt(self, module_name: str, name: str) -> str | None:
         """Return a source excerpt for a public API, or None if unavailable.

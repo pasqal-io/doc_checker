@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 import random
 from pathlib import Path
 
@@ -40,6 +41,11 @@ class LLMQualityChecker(Checker):
         self.model = model
         self.api_key = api_key
         self.sample_rate = sample_rate
+        if min_severity not in SEVERITY_RANK:
+            raise ValueError(
+                f"Invalid min_severity {min_severity!r}; "
+                f"choose from {sorted(SEVERITY_RANK)}"
+            )
         self.min_severity = min_severity
         self.verbose = verbose
         self.use_cache = use_cache
@@ -276,20 +282,33 @@ class QualityChecker:
                 )
             ]
 
-        # Collapse re-exports: the same object can be discovered both at the
-        # top level and in its defining submodule (different module paths). Key
-        # on the full contract (name + signature + docstring) so genuinely
-        # distinct same-named APIs are still checked separately.
+        # Collapse re-exports: the same object can be discovered both at the top
+        # level and in its defining submodule (different module paths). Key on the
+        # object's canonical identity (defining module + qualname) so re-exports
+        # merge but genuinely distinct same-named APIs — different objects that
+        # happen to share name/signature/docstring — are still checked separately.
+        # Fall back to the full contract when the object can't be resolved.
         unique_apis: list[SignatureInfo] = []
-        seen: set[tuple[str, tuple[str, ...], str | None, str | None]] = set()
+        seen: set[object] = set()
         for api in apis:
-            key = (api.name, tuple(api.parameters), api.return_annotation, api.docstring)
+            key: object = self.code_analyzer.get_canonical_key(api.module, api.name)
+            if key is None:
+                key = (
+                    api.name,
+                    tuple(api.parameters),
+                    api.return_annotation,
+                    api.docstring,
+                )
             if key not in seen:
                 seen.add(key)
                 unique_apis.append(api)
 
         if sample_rate < 1.0:
-            unique_apis = random.sample(unique_apis, int(len(unique_apis) * sample_rate))
+            # Round up so a small module with a positive sample_rate still checks
+            # at least one API instead of silently sampling zero (int() truncation
+            # of e.g. 1 * 0.5 -> 0 would leave the module unchecked with no signal).
+            k = max(1, math.ceil(len(unique_apis) * sample_rate))
+            unique_apis = random.sample(unique_apis, k)
 
         if verbose:
             print(f"Checking {len(unique_apis)} APIs in {module_name}...")

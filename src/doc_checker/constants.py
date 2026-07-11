@@ -12,7 +12,19 @@ PULSER_REEXPORTS = {  # TODO: make configurable via CLI
 }
 
 
+# Params always skipped by the undocumented-parameter check. Kept minimal:
+# self/cls are already stripped during signature extraction, so this is only
+# belt-and-suspenders. Enum-machinery names live in ENUM_IGNORE_PARAMS below and
+# must NOT be listed here, or real non-enum params of those names (e.g. a
+# `values` or `type` argument) would silently escape documentation checks.
 IGNORE_PARAMS = {
+    "cls",
+}
+
+
+# Enum functional-API machinery params (not user-facing). Dropped only for
+# Enum subclasses, gated by `is_enum` in the signature extractor.
+ENUM_IGNORE_PARAMS = {
     "value",
     "values",
     "names",
@@ -21,7 +33,6 @@ IGNORE_PARAMS = {
     "type",
     "start",
     "boundary",
-    "cls",
 }
 
 
