@@ -179,13 +179,19 @@ class CodeAnalyzer:
     ) -> SignatureInfo:
         """Extract class signature from its __init__ method.
 
+        For Enum subclasses the enum functional-API machinery params
+        (ENUM_IGNORE_PARAMS: value, names, module, ...) are dropped, since
+        they are not user-facing. Also captures a faithful ``signature``
+        string via inspect.signature.
+
         Args:
             name: Class name.
             cls: The class object.
             module_name: Parent module's fully qualified name.
 
         Returns:
-            SignatureInfo with kind="class", parameters from __init__.
+            SignatureInfo with kind="class", parameters from __init__ (enum
+            machinery params excluded for Enum subclasses).
         """
         params: list[str] = []
         signature: str | None = None
@@ -219,6 +225,8 @@ class CodeAnalyzer:
         self, name: str, func: Any, module_name: str
     ) -> SignatureInfo:
         """Extract function/method signature.
+
+        Also captures a faithful ``signature`` string via inspect.signature.
 
         Args:
             name: Function name.
