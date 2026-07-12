@@ -93,11 +93,11 @@ class OllamaBackend(LLMBackend):
 class OpenAIBackend(LLMBackend):
     """OpenAI API backend."""
 
-    def __init__(self, model: str = "gpt-5.5", api_key: str | None = None):
+    def __init__(self, model: str = "gpt-5.6-sol", api_key: str | None = None):
         """Initialize OpenAI backend.
 
         Args:
-            model: Model name (gpt-5.5 recommended)
+            model: Model name (gpt-5.6-sol recommended)
             api_key: API key (defaults to OPENAI_API_KEY env var)
 
         Raises:
@@ -160,6 +160,6 @@ def get_backend(
     if backend_type == "ollama":
         return OllamaBackend(model or "qwen3:1.7b")
     elif backend_type == "openai":
-        return OpenAIBackend(model or "gpt-5.5", api_key)
+        return OpenAIBackend(model or "gpt-5.6-sol", api_key)
     else:
         raise ValueError(f"Unknown backend: {backend_type}. Choose from: ollama, openai")
