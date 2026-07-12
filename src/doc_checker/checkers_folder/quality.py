@@ -13,6 +13,32 @@ from doc_checker.utils.code_analyzer import CodeAnalyzer
 from .base import Checker
 
 
+def _single_issue(
+    api_name: str,
+    message: str,
+    suggestion: str,
+    *,
+    severity: str = "critical",
+    category: str = "error",
+) -> list[QualityIssue]:
+    """One-element issue list for the structural / error early-return paths.
+
+    These returns all carry a single ``critical`` issue with no line reference;
+    factoring them out keeps each call site to its meaningful fields (message,
+    suggestion) instead of repeating the full QualityIssue construction.
+    """
+    return [
+        QualityIssue(
+            api_name=api_name,
+            severity=severity,
+            category=category,
+            message=message,
+            suggestion=suggestion,
+            line_reference=None,
+        )
+    ]
+
+
 class LLMQualityChecker(Checker):
     """LLM-based docstring quality analysis.
 
@@ -119,16 +145,11 @@ class QualityChecker:
         api_info = next((api for api in apis if api.name == api_name), None)
 
         if not api_info:
-            return [
-                QualityIssue(
-                    api_name=f"{module_name}.{api_name}",
-                    severity="critical",
-                    category="error",
-                    message=f"API {api_name} not found in module {module_name}",
-                    suggestion="Check API name spelling",
-                    line_reference=None,
-                )
-            ]
+            return _single_issue(
+                f"{module_name}.{api_name}",
+                f"API {api_name} not found in module {module_name}",
+                "Check API name spelling",
+            )
 
         return self._check_api_info(api_info, verbose)
 
@@ -145,16 +166,12 @@ class QualityChecker:
         display_name = f"{api_info.module}.{api_info.name}"
 
         if not api_info.docstring:
-            return [
-                QualityIssue(
-                    api_name=display_name,
-                    severity="critical",
-                    category="completeness",
-                    message="No docstring found",
-                    suggestion="Add docstring explaining what this API does",
-                    line_reference=None,
-                )
-            ]
+            return _single_issue(
+                display_name,
+                "No docstring found",
+                "Add docstring explaining what this API does",
+                category="completeness",
+            )
 
         # Build signature string. Prefer the faithful inspect.signature rendering
         # (preserves "*", keyword-only markers, and full annotations) so it agrees
@@ -190,31 +207,21 @@ class QualityChecker:
         try:
             response = self.backend.generate_json(prompt)
         except Exception as e:
-            return [
-                QualityIssue(
-                    api_name=display_name,
-                    severity="critical",
-                    category="error",
-                    message=f"LLM check failed: {e}",
-                    suggestion="Check LLM backend connection",
-                    line_reference=None,
-                )
-            ]
+            return _single_issue(
+                display_name,
+                f"LLM check failed: {e}",
+                "Check LLM backend connection",
+            )
 
         # A returned-but-unparseable (or empty) response carries an "error" key
         # and no issues. Surface it as critical instead of silently reporting a
         # clean API — e.g. when a reasoning model spends its whole token budget.
         if response.get("error"):
-            return [
-                QualityIssue(
-                    api_name=display_name,
-                    severity="critical",
-                    category="error",
-                    message=f"LLM response could not be parsed: {response['error']}",
-                    suggestion="Model returned malformed or empty output; re-run",
-                    line_reference=None,
-                )
-            ]
+            return _single_issue(
+                display_name,
+                f"LLM response could not be parsed: {response['error']}",
+                "Model returned malformed or empty output; re-run",
+            )
 
         # Parse response
         issues = []
@@ -255,16 +262,11 @@ class QualityChecker:
         if not apis:
             if verbose:
                 print(f"No public APIs found in {module_name}")
-            return [
-                QualityIssue(
-                    api_name=module_name,
-                    severity="critical",
-                    category="error",
-                    message=f"No public APIs found in module {module_name}",
-                    suggestion="Check module name or ensure it is installed",
-                    line_reference=None,
-                )
-            ]
+            return _single_issue(
+                module_name,
+                f"No public APIs found in module {module_name}",
+                "Check module name or ensure it is installed",
+            )
 
         # Collapse re-exports: the same object can be discovered both at the top
         # level and in its defining submodule (different module paths). Key on the
