@@ -58,9 +58,6 @@ doc-checker --modules my_package --check-quality --quality-sample 0.1 --root .
 # Quality reports only critical issues by default; widen to see more:
 doc-checker --modules my_package --check-quality --quality-min-severity warning --root .
 
-# Reuse cached LLM responses (caching is off by default)
-doc-checker --modules my_package --check-quality --cache --root .
-
 # Multiple modules
 doc-checker --modules my_package other_pkg --root /path/to/project
 
@@ -102,29 +99,13 @@ Structural failures (missing docstring, LLM/backend error, no public APIs found,
 or an unparseable/empty model response) are always emitted as `critical`, so a
 broken backend can never look "clean".
 
-### Response caching
-
-Caching is **off by default** (results stay fresh — see below). Pass `--cache`
-to enable it: LLM quality responses are then stored on disk so re-running on an
-unchanged codebase doesn't re-pay for the same API calls. Entries are keyed by a
-hash of the model plus the full prompt (signature, docstring, and source
-excerpt), so the cache self-invalidates whenever any of those change — there's
-nothing to invalidate manually. Failed/empty responses are never cached, so a
-later run retries them.
-
-The cache lives in `$XDG_CACHE_HOME/doc_checker` (or `~/.cache/doc_checker`).
-With caching enabled, pass `--no-cache` to bypass it for a single run.
-
 ### Stochastic results
 
 Each API is checked with an independent LLM call, capped at the few most
 important issues, so results are **non-deterministic across runs**: precision is
 high (few false positives), but a single run may not surface *every* real issue —
-different runs can catch different ones. This is why caching is off by default.
-If you enable `--cache`, be aware it freezes a run's findings (including whatever
-it missed) until the model or prompt inputs change. For a more exhaustive audit,
-run a few times and combine the results rather than trusting one run to be
-complete.
+different runs can catch different ones. For a more exhaustive audit, run a few
+times and combine the results rather than trusting one run to be complete.
 
 ## Pre-commit Hook
 
@@ -173,7 +154,6 @@ CLI -> DriftDetector -> checkers_folder/ -> DriftReport -> formatters
 - `utils/link_checker.py` - Async HTTP validation (aiohttp or urllib fallback)
 - `llm_backends.py` - OllamaBackend / OpenAIBackend abstraction
 - `prompts.py` - LLM prompt templates
-- `cache.py` - On-disk cache for LLM quality responses (`ResponseCache`)
 - `models.py` - Dataclasses (SignatureInfo, DocReference, DriftReport, etc.)
 - `formatters.py` - Report rendering (text/JSON)
 - `cli.py` - Command-line interface

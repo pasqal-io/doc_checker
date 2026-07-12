@@ -226,48 +226,6 @@ def test_quality_checker_surfaces_parse_failure(
 
 @patch("doc_checker.checkers_folder.quality.get_backend")
 @patch("doc_checker.checkers_folder.quality.CodeAnalyzer")
-def test_quality_checker_uses_cache(
-    mock_analyzer_class, mock_get_backend, tmp_path, mock_backend, mock_code_analyzer
-):
-    """A second check of the same API hits the cache instead of the backend."""
-    from doc_checker.cache import ResponseCache
-
-    mock_backend.model = "test-model"
-    mock_get_backend.return_value = mock_backend
-    mock_analyzer_class.return_value = mock_code_analyzer
-
-    cache = ResponseCache(tmp_path / "cache")
-    checker = QualityChecker(tmp_path, cache=cache)
-    checker.check_api_quality("test_func", "test_module")
-    checker.check_api_quality("test_func", "test_module")
-
-    assert mock_backend.generate_json.call_count == 1
-
-
-@patch("doc_checker.checkers_folder.quality.get_backend")
-@patch("doc_checker.checkers_folder.quality.CodeAnalyzer")
-def test_quality_checker_does_not_cache_errors(
-    mock_analyzer_class, mock_get_backend, tmp_path, mock_code_analyzer
-):
-    """Error responses are not cached, so a later run can retry."""
-    from doc_checker.cache import ResponseCache
-
-    mock_backend = MagicMock()
-    mock_backend.model = "test-model"
-    mock_backend.generate_json.return_value = {"error": "boom", "issues": []}
-    mock_get_backend.return_value = mock_backend
-    mock_analyzer_class.return_value = mock_code_analyzer
-
-    cache = ResponseCache(tmp_path / "cache")
-    checker = QualityChecker(tmp_path, cache=cache)
-    checker.check_api_quality("test_func", "test_module")
-    checker.check_api_quality("test_func", "test_module")
-
-    assert mock_backend.generate_json.call_count == 2
-
-
-@patch("doc_checker.checkers_folder.quality.get_backend")
-@patch("doc_checker.checkers_folder.quality.CodeAnalyzer")
 def test_quality_checker_verbose_output(
     mock_analyzer_class,
     mock_get_backend,

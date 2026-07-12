@@ -59,13 +59,6 @@ def main() -> int:
         help="Minimum severity to report (default: critical; use 'warning' or "
         "'suggestion' to also see less severe issues)",
     )
-    parser.add_argument(
-        "--cache",
-        action=argparse.BooleanOptionalAction,
-        default=False,
-        help="Enable the LLM response cache (default: disabled; pass --cache to "
-        "reuse responses, --no-cache to force fresh queries)",
-    )
     parser.add_argument("--verbose", "-v", action="store_true", help="Verbose output")
     parser.add_argument("--json", action="store_true", help="Output as JSON")
     parser.add_argument(
@@ -146,7 +139,6 @@ def main() -> int:
             quality_api_key=api_key,
             quality_sample_rate=args.quality_sample,
             quality_min_severity=args.quality_min_severity,
-            quality_use_cache=args.cache,
             verbose=args.verbose,
         )
 

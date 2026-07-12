@@ -93,7 +93,8 @@ def run_simulation(config: dict) -> QuantumState:
     docs_dir.mkdir()
 
     index_md = docs_dir / "index.md"
-    index_md.write_text("""
+    index_md.write_text(
+        """
 # My Library Documentation
 
 Welcome to My Library!
@@ -104,23 +105,28 @@ Welcome to My Library!
 
 [External Link](https://example.com)
 [Local Link](api.md)
-""")
+"""
+    )
 
     api_md = docs_dir / "api.md"
-    api_md.write_text("""
+    api_md.write_text(
+        """
 # API Reference
 
 ::: my_lib.QuantumState
-""")
+"""
+    )
 
     # Create mkdocs.yml
     mkdocs_yml = tmp_path / "mkdocs.yml"
-    mkdocs_yml.write_text("""
+    mkdocs_yml.write_text(
+        """
 site_name: My Library
 nav:
   - Home: index.md
   - API: api.md
-""")
+"""
+    )
 
     sys.path.insert(0, str(tmp_path))
     return tmp_path
