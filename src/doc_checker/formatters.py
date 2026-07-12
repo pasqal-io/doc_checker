@@ -84,9 +84,8 @@ def format_report(report: DriftReport) -> str:
             by_severity.setdefault(issue.severity, []).append(issue)
 
         severity_icon = {"critical": "✘", "warning": "⚠", "suggestion": "ℹ"}
-        # Unknown severities (the LLM occasionally returns off-menu values, which
-        # the min-severity filter deliberately keeps) are appended last rather
-        # than crashing the report.
+        # Unknown severities (off-menu LLM values the min-severity filter keeps)
+        # are appended last rather than crashing the report.
         known = ["critical", "warning", "suggestion"]
         extra = [s for s in by_severity if s not in known]
         for severity in [*known, *extra]:

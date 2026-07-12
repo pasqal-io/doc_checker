@@ -173,10 +173,8 @@ class QualityChecker:
                 category="completeness",
             )
 
-        # Build signature string. Prefer the faithful inspect.signature rendering
-        # (preserves "*", keyword-only markers, and full annotations) so it agrees
-        # with the source excerpt; fall back to the reconstructed form only when
-        # the signature could not be introspected.
+        # Prefer inspect.signature's faithful rendering (keeps "*", keyword-only
+        # markers, full annotations); fall back to the reconstructed form.
         if api_info.signature is not None:
             signature = f"def {api_info.name}{api_info.signature}"
         else:
@@ -189,9 +187,8 @@ class QualityChecker:
         if verbose:
             print(f"  Checking {display_name}...")
 
-        # Source is fetched on demand (not during discovery) so only APIs that
-        # reach the LLM — already deduped by check_module_quality — pay the
-        # inspect.getsource cost. A pre-set excerpt (e.g. in tests) wins.
+        # Source fetched on demand so only APIs reaching the LLM pay the
+        # inspect.getsource cost; a pre-set excerpt (e.g. in tests) wins.
         code_snippet = api_info.source_excerpt or self.code_analyzer.get_source_excerpt(
             api_info.module, api_info.name
         )
@@ -213,9 +210,8 @@ class QualityChecker:
                 "Check LLM backend connection",
             )
 
-        # A returned-but-unparseable (or empty) response carries an "error" key
-        # and no issues. Surface it as critical instead of silently reporting a
-        # clean API — e.g. when a reasoning model spends its whole token budget.
+        # An unparseable/empty response carries an "error" key + no issues; surface
+        # it as critical instead of reporting a falsely clean API.
         if response.get("error"):
             return _single_issue(
                 display_name,
@@ -268,12 +264,8 @@ class QualityChecker:
                 "Check module name or ensure it is installed",
             )
 
-        # Collapse re-exports: the same object can be discovered both at the top
-        # level and in its defining submodule (different module paths). Key on the
-        # object's canonical identity (defining module + qualname) so re-exports
-        # merge but genuinely distinct same-named APIs — different objects that
-        # happen to share name/signature/docstring — are still checked separately.
-        # Fall back to the full contract when the object can't be resolved.
+        # Dedupe re-exports by canonical identity (defining module + qualname) so
+        # duplicates merge but distinct same-named APIs stay separate (contract fallback).
         unique_apis: list[SignatureInfo] = []
         seen: set[object] = set()
         for api in apis:
@@ -290,9 +282,8 @@ class QualityChecker:
                 unique_apis.append(api)
 
         if sample_rate < 1.0:
-            # Round up so a small module with a positive sample_rate still checks
-            # at least one API instead of silently sampling zero (int() truncation
-            # of e.g. 1 * 0.5 -> 0 would leave the module unchecked with no signal).
+            # Round up so a small module with positive sample_rate still checks at
+            # least one API instead of truncating to zero (int(1 * 0.5) == 0).
             k = max(1, math.ceil(len(unique_apis) * sample_rate))
             unique_apis = random.sample(unique_apis, k)
 
