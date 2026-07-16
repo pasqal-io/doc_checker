@@ -21,6 +21,11 @@ class LLMBackend(ABC):
     def generate_json(self, prompt: str, temperature: float = 0.1) -> dict[str, Any]:
         """Generate and parse JSON response."""
         response: str = self.generate(prompt, temperature)
+        # Strip reasoning-model <think>...</think> blocks (qwen3, etc.)
+        if "<think>" in response:
+            end = response.rfind("</think>")
+            if end != -1:
+                response = response[end + len("</think>") :].strip()
         # Extract JSON from markdown code blocks if present
         if "```json" in response:
             start = response.find("```json") + 7
@@ -83,7 +88,7 @@ class OllamaBackend(LLMBackend):
             prompt=prompt,
             options={
                 "temperature": temperature,
-                "num_predict": 1024,
+                "num_predict": 4096,
             },
         )
         result: str = response["response"]
