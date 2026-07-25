@@ -45,8 +45,6 @@ class LLMBackend(ABC):
                 "error": f"Failed to parse JSON: {e}",
                 "raw_response": response,
                 "issues": [],
-                "score": 0,
-                "summary": "Failed to parse LLM response",
             }
 
 
