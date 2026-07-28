@@ -81,7 +81,8 @@ doc-checker --modules my_package --check-basic -v --root /path/to/project
 > reasoning models (default `gpt-5.6-sol`) via the Responses API. These models only
 > accept the default `temperature`, so the backend does not send a `temperature`
 > parameter. Pointing `--llm-model` at older non-reasoning chat models
-> (e.g. `gpt-4o`) is unsupported. For local models use the `ollama` backend.
+> (e.g. `gpt-4o`) is unsupported *by the openai backend*. For non-reasoning /
+> non-thinking or local models, use the `ollama` backend, which runs any model.
 
 ### Quality severity
 

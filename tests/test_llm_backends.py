@@ -112,7 +112,7 @@ def test_openai_backend_generate():
         mock_openai_class.return_value = mock_client
 
         backend = OpenAIBackend(model="gpt-5.6-sol", api_key="test-key")
-        result = backend.generate("prompt", temperature=0.1)
+        result = backend.generate("prompt")
 
         assert result == "hello"
         mock_client.responses.create.assert_called_once_with(

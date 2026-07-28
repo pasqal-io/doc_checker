@@ -160,8 +160,9 @@ ollama pull qwen3:1.7b   # Install the default model
 
 ### Empty / unparseable LLM response
 Reported as a `critical` `error` issue ("Model returned malformed or empty
-output; re-run"). Usually a reasoning model that ran out of output tokens — try
-a larger/non-thinking model, or re-run.
+output; re-run"). Usually a reasoning model that ran out of output tokens — on
+ollama, try a larger or non-thinking model; on openai (gpt-5.x only, no
+non-thinking option), just re-run.
 
 ### Out of memory
 ```bash

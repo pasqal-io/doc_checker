@@ -14,13 +14,13 @@ class LLMBackend(ABC):
     model: str
 
     @abstractmethod
-    def generate(self, prompt: str, temperature: float = 0.1) -> str:
+    def generate(self, prompt: str) -> str:
         """Generate completion from prompt."""
         pass
 
-    def generate_json(self, prompt: str, temperature: float = 0.1) -> dict[str, Any]:
+    def generate_json(self, prompt: str) -> dict[str, Any]:
         """Generate and parse JSON response."""
-        response: str = self.generate(prompt, temperature)
+        response: str = self.generate(prompt)
         # Strip reasoning-model <think>...</think> blocks (qwen3, etc.)
         if "<think>" in response:
             end = response.rfind("</think>")
@@ -79,13 +79,13 @@ class OllamaBackend(LLMBackend):
                 f"Ollama service not running. Start with: ollama serve\n" f"Error: {e}"
             )
 
-    def generate(self, prompt: str, temperature: float = 0.1) -> str:
+    def generate(self, prompt: str) -> str:
         """Generate completion via Ollama."""
         response = self.client.generate(
             model=self.model,
             prompt=prompt,
             options={
-                "temperature": temperature,
+                "temperature": 0.1,  # low, for deterministic JSON output
                 "num_predict": 4096,
             },
         )
@@ -126,11 +126,11 @@ class OpenAIBackend(LLMBackend):
         self.client = OpenAI(api_key=self.api_key)
         self.model = model
 
-    def generate(self, prompt: str, temperature: float = 0.1) -> str:
+    def generate(self, prompt: str) -> str:
         """Generate completion via OpenAI Responses API.
 
-        ``temperature`` is kept for interface compatibility but not forwarded:
-        gpt-5.x reasoning models only accept the default value.
+        gpt-5.x reasoning models only accept the default ``temperature``, so
+        none is sent.
         """
         response = self.client.responses.create(
             model=self.model,
