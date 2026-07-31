@@ -16,7 +16,7 @@ from doc_checker.checkers_folder.api_coverage import (
 from doc_checker.checkers_folder.docstrings_links import DocstringsLinksChecker
 from doc_checker.checkers_folder.local_links import LocalLinksChecker
 from doc_checker.checkers_folder.references import ReferencesChecker
-from doc_checker.constants import IGNORE_PARAMS
+from doc_checker.constants import ENUM_IGNORE_PARAMS, IGNORE_PARAMS
 from doc_checker.models import DriftReport
 from doc_checker.utils.parsers import MarkdownParser, YamlParser
 
@@ -701,7 +701,7 @@ class TestQualityChecks:
         mock_checker.check_module_quality.return_value = [
             MagicMock(
                 api_name="test_pkg.test_function",
-                severity="warning",
+                severity="critical",
                 category="grammar",
                 message="Test issue",
                 suggestion="Fix it",
@@ -964,7 +964,11 @@ class TestHelperMethods:
         assert result is None
 
     def test_ignore_params_class_constant(self, test_project: Path):
-        """Test IGNORE_PARAMS is accessible as class constant."""
+        """Test IGNORE_PARAMS is accessible and enum machinery is separated out."""
         assert "cls" in IGNORE_PARAMS
-        assert "value" in IGNORE_PARAMS
         assert "self" not in IGNORE_PARAMS  # self not in list
+        # Enum-machinery names must NOT leak into the general ignore set, or
+        # real non-enum params of those names escape documentation checks.
+        assert "value" in ENUM_IGNORE_PARAMS
+        assert "values" in ENUM_IGNORE_PARAMS
+        assert "value" not in IGNORE_PARAMS

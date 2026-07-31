@@ -2,13 +2,19 @@
 
 from __future__ import annotations
 
+import enum
 import importlib
 import inspect
 import pkgutil
 from pathlib import Path
 from typing import Any
 
+from doc_checker.constants import ENUM_IGNORE_PARAMS
 from doc_checker.models import SignatureInfo
+
+# Max lines of source sent to the LLM for code-vs-docstring alignment. Bounds
+# input tokens; the docstring + signature already carry the public contract.
+MAX_SOURCE_LINES = 25
 
 
 class CodeAnalyzer:
@@ -173,20 +179,34 @@ class CodeAnalyzer:
     ) -> SignatureInfo:
         """Extract class signature from its __init__ method.
 
+        For Enum subclasses the enum functional-API machinery params
+        (ENUM_IGNORE_PARAMS: value, names, module, ...) are dropped, since
+        they are not user-facing. Also captures a faithful ``signature``
+        string via inspect.signature.
+
         Args:
             name: Class name.
             cls: The class object.
             module_name: Parent module's fully qualified name.
 
         Returns:
-            SignatureInfo with kind="class", parameters from __init__.
+            SignatureInfo with kind="class", parameters from __init__ (enum
+            machinery params excluded for Enum subclasses).
         """
         params: list[str] = []
+        signature: str | None = None
+        # Enum subclasses expose the enum machinery constructor (value, names,
+        # module, qualname, ...) — not real user-facing params. Drop those.
+        is_enum = issubclass(cls, enum.Enum)
         try:
             sig = inspect.signature(cls)
-            params = [
-                self._format_param(p) for p in sig.parameters.values() if p.name != "self"
+            visible = [
+                p
+                for p in sig.parameters.values()
+                if p.name != "self" and not (is_enum and p.name in ENUM_IGNORE_PARAMS)
             ]
+            params = [self._format_param(p) for p in visible]
+            signature = str(sig.replace(parameters=visible))
         except (ValueError, TypeError):
             pass
 
@@ -198,12 +218,15 @@ class CodeAnalyzer:
             docstring=inspect.getdoc(cls),
             is_public=not name.startswith("_"),
             kind="class",
+            signature=signature,
         )
 
     def _extract_function_signature(
         self, name: str, func: Any, module_name: str
     ) -> SignatureInfo:
         """Extract function/method signature.
+
+        Also captures a faithful ``signature`` string via inspect.signature.
 
         Args:
             name: Function name.
@@ -215,6 +238,7 @@ class CodeAnalyzer:
         """
         params = []
         return_ann = None
+        signature: str | None = None
         try:
             sig = inspect.signature(func)
             params = [
@@ -224,6 +248,7 @@ class CodeAnalyzer:
             ]
             if sig.return_annotation != inspect.Signature.empty:
                 return_ann = str(sig.return_annotation)
+            signature = str(sig)
         except (ValueError, TypeError):
             pass
 
@@ -235,7 +260,63 @@ class CodeAnalyzer:
             docstring=inspect.getdoc(func),
             is_public=not name.startswith("_"),
             kind="function",
+            signature=signature,
         )
+
+    def get_canonical_key(self, module_name: str, name: str) -> tuple[str, str] | None:
+        """Return ``(defining_module, qualname)`` identifying the underlying object.
+
+        Re-exports of the same object (discovered via different import paths)
+        resolve to the same key, so they can be collapsed, while genuinely
+        distinct same-named objects get distinct keys and are not merged.
+        Returns None if the object can't be resolved or lacks identity metadata,
+        so callers should fall back to a content-based key.
+        """
+        try:
+            module = importlib.import_module(module_name)
+            obj = getattr(module, name)
+        except (ImportError, SyntaxError, AttributeError):
+            return None
+        mod = getattr(obj, "__module__", None)
+        qual = getattr(obj, "__qualname__", None)
+        if not isinstance(mod, str) or not isinstance(qual, str):
+            return None
+        return (mod, qual)
+
+    def get_source_excerpt(self, module_name: str, name: str) -> str | None:
+        """Return a source excerpt for a public API, or None if unavailable.
+
+        Resolved on demand (not during API discovery) so only callers that
+        need source — currently the LLM quality checker — pay the
+        ``inspect.getsource`` cost, and only for the APIs they actually use.
+        """
+        try:
+            module = importlib.import_module(module_name)
+            obj = getattr(module, name)
+        except (ImportError, SyntaxError, AttributeError):
+            return None
+        return self._get_source_excerpt(obj)
+
+    def _get_source_excerpt(self, obj: Any) -> str | None:
+        """Return the first lines of obj's source, or None if unavailable.
+
+        For classes, prefers the class's own ``__init__`` since documented
+        parameters come from it; falls back to the class body otherwise.
+        """
+        target = obj
+        if inspect.isclass(obj):
+            init = obj.__dict__.get("__init__")
+            if inspect.isfunction(init):
+                target = init
+        try:
+            source = inspect.getsource(target)
+        except (OSError, TypeError):
+            return None
+        lines = source.splitlines()
+        excerpt = "\n".join(lines[:MAX_SOURCE_LINES])
+        if len(lines) > MAX_SOURCE_LINES:
+            excerpt += "\n    # ... (truncated)"
+        return excerpt
 
     def _format_param(self, param: inspect.Parameter) -> str:
         """Format parameter for display."""

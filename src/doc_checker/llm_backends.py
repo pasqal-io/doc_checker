@@ -14,13 +14,18 @@ class LLMBackend(ABC):
     model: str
 
     @abstractmethod
-    def generate(self, prompt: str, temperature: float = 0.1) -> str:
+    def generate(self, prompt: str) -> str:
         """Generate completion from prompt."""
         pass
 
-    def generate_json(self, prompt: str, temperature: float = 0.1) -> dict[str, Any]:
+    def generate_json(self, prompt: str) -> dict[str, Any]:
         """Generate and parse JSON response."""
-        response: str = self.generate(prompt, temperature)
+        response: str = self.generate(prompt)
+        # Strip reasoning-model <think>...</think> blocks (qwen3, etc.)
+        if "<think>" in response:
+            end = response.rfind("</think>")
+            if end != -1:
+                response = response[end + len("</think>") :].strip()
         # Extract JSON from markdown code blocks if present
         if "```json" in response:
             start = response.find("```json") + 7
@@ -40,8 +45,6 @@ class LLMBackend(ABC):
                 "error": f"Failed to parse JSON: {e}",
                 "raw_response": response,
                 "issues": [],
-                "score": 0,
-                "summary": "Failed to parse LLM response",
             }
 
 
@@ -76,14 +79,14 @@ class OllamaBackend(LLMBackend):
                 f"Ollama service not running. Start with: ollama serve\n" f"Error: {e}"
             )
 
-    def generate(self, prompt: str, temperature: float = 0.1) -> str:
+    def generate(self, prompt: str) -> str:
         """Generate completion via Ollama."""
         response = self.client.generate(
             model=self.model,
             prompt=prompt,
             options={
-                "temperature": temperature,
-                "num_predict": 1024,
+                "temperature": 0.1,  # low, for deterministic JSON output
+                "num_predict": 4096,
             },
         )
         result: str = response["response"]
@@ -93,11 +96,11 @@ class OllamaBackend(LLMBackend):
 class OpenAIBackend(LLMBackend):
     """OpenAI API backend."""
 
-    def __init__(self, model: str = "gpt-5.2", api_key: str | None = None):
+    def __init__(self, model: str = "gpt-5.6-sol", api_key: str | None = None):
         """Initialize OpenAI backend.
 
         Args:
-            model: Model name (gpt-5.2 recommended)
+            model: Model name (gpt-5.6-sol recommended)
             api_key: API key (defaults to OPENAI_API_KEY env var)
 
         Raises:
@@ -123,15 +126,18 @@ class OpenAIBackend(LLMBackend):
         self.client = OpenAI(api_key=self.api_key)
         self.model = model
 
-    def generate(self, prompt: str, temperature: float = 0.1) -> str:
-        """Generate completion via OpenAI."""
-        response = self.client.chat.completions.create(
+    def generate(self, prompt: str) -> str:
+        """Generate completion via OpenAI Responses API.
+
+        gpt-5.x reasoning models only accept the default ``temperature``, so
+        none is sent.
+        """
+        response = self.client.responses.create(
             model=self.model,
-            messages=[{"role": "user", "content": prompt}],
-            temperature=temperature,
-            max_completion_tokens=1024,
+            input=prompt,
+            max_output_tokens=16384,
         )
-        return response.choices[0].message.content or ""
+        return response.output_text or ""
 
 
 def get_backend(
@@ -157,6 +163,6 @@ def get_backend(
     if backend_type == "ollama":
         return OllamaBackend(model or "qwen3:1.7b")
     elif backend_type == "openai":
-        return OpenAIBackend(model or "gpt-5.2", api_key)
+        return OpenAIBackend(model or "gpt-5.6-sol", api_key)
     else:
         raise ValueError(f"Unknown backend: {backend_type}. Choose from: ollama, openai")

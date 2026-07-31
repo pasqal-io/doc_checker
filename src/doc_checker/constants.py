@@ -12,13 +12,31 @@ PULSER_REEXPORTS = {  # TODO: make configurable via CLI
 }
 
 
+# Params always skipped by the undocumented-param check (self/cls already stripped).
+# Enum-machinery names go in ENUM_IGNORE_PARAMS below, NOT here, not to mask real params.
 IGNORE_PARAMS = {
+    "cls",
+}
+
+
+# Enum functional-API machinery params (not user-facing). Dropped only for
+# Enum subclasses, gated by `is_enum` in the signature extractor.
+ENUM_IGNORE_PARAMS = {
     "value",
+    "values",
     "names",
     "module",
     "qualname",
     "type",
     "start",
     "boundary",
-    "cls",
+}
+
+
+# Ordering of quality-issue severities, low to high. Used by --quality-min-severity
+# to filter out issues below a threshold. Unknown severities are always kept.
+SEVERITY_RANK = {
+    "suggestion": 1,
+    "warning": 2,
+    "critical": 3,
 }

@@ -44,13 +44,20 @@ def main() -> int:
     parser.add_argument(
         "--llm-model",
         type=str,
-        help="LLM model name (defaults: qwen3:1.7b for ollama, gpt-5.2 for openai)",
+        help="LLM model name (defaults: qwen3:1.7b for ollama, gpt-5.6-sol for openai)",
     )
     parser.add_argument(
         "--quality-sample",
         type=float,
         default=1.0,
         help="Sample rate for quality checks (0.0-1.0, default: 1.0 = all APIs)",
+    )
+    parser.add_argument(
+        "--quality-min-severity",
+        choices=["critical", "warning", "suggestion"],
+        default="critical",
+        help="Minimum severity to report (default: critical; use 'warning' or "
+        "'suggestion' to also see less severe issues)",
     )
     parser.add_argument("--verbose", "-v", action="store_true", help="Verbose output")
     parser.add_argument("--json", action="store_true", help="Output as JSON")
@@ -131,6 +138,7 @@ def main() -> int:
             quality_model=args.llm_model,
             quality_api_key=api_key,
             quality_sample_rate=args.quality_sample,
+            quality_min_severity=args.quality_min_severity,
             verbose=args.verbose,
         )
 

@@ -13,7 +13,7 @@ Check documentation drift: broken links, undocumented APIs, invalid references.
 - **Docstring Links**: Validate links embedded in Python docstrings
 - **Parameter Docs**: Check function parameters mentioned in docstrings
 - **mkdocs.yml Validation**: Verify nav paths exist
-- **LLM Quality Checks**: Evaluate docstring quality (english, code-alignment, completeness)
+- **LLM Quality Checks**: Evaluate docstring quality — English, completeness, and code alignment. The model is shown the signature, docstring, and a short source excerpt, and flags code/docstring contradictions and mismatched or undocumented parameters. Reports only `critical` issues by default (see below)
 
 ## Installation
 
@@ -49,11 +49,14 @@ doc-checker --modules my_package --check-basic --root /path/to/project
 # External HTTP link validation only (slow)
 doc-checker --modules my_package --check-external-links --root /path/to/project
 
-# LLM quality checks (default: ollama/qwen3:1.7b, openai/gpt-5.2)
+# LLM quality checks (default: ollama/qwen3:1.7b, openai/gpt-5.6-sol)
 doc-checker --modules my_package --check-quality --root /path/to/project
 doc-checker --modules my_package --check-quality --llm-backend openai --root .
-doc-checker --modules my_package --check-quality --llm-model gpt-5.2 --root .
+doc-checker --modules my_package --check-quality --llm-model gpt-5.6-sol --root .
 doc-checker --modules my_package --check-quality --quality-sample 0.1 --root .
+
+# Quality reports only critical issues by default; widen to see more:
+doc-checker --modules my_package --check-quality --quality-min-severity warning --root .
 
 # Multiple modules
 doc-checker --modules my_package other_pkg --root /path/to/project
@@ -73,6 +76,37 @@ doc-checker --modules my_package --check-basic --warn-only --root /path/to/proje
 # Verbose
 doc-checker --modules my_package --check-basic -v --root /path/to/project
 ```
+
+> **OpenAI backend: gpt-5.x only.** The `openai` backend targets the gpt-5.x
+> reasoning models (default `gpt-5.6-sol`) via the Responses API. These models only
+> accept the default `temperature`, so the backend does not send a `temperature`
+> parameter. Pointing `--llm-model` at older non-reasoning chat models
+> (e.g. `gpt-4o`) is unsupported *by the openai backend*. For non-reasoning /
+> non-thinking or local models, use the `ollama` backend, which runs any model.
+
+### Quality severity
+
+Every quality issue the model returns is rated `critical`, `warning`, or
+`suggestion`. `--quality-min-severity` drops everything below the threshold
+*before* it reaches the report, so it also affects the exit code.
+
+- **Default is `critical`** — only the most important issues (code/docstring
+  contradictions, mismatched or undocumented parameters, missing docstrings,
+  wrong info). Most runs stay quiet.
+- Use `--quality-min-severity warning` or `suggestion` to also see clarity and
+  style feedback.
+
+Structural failures (missing docstring, LLM/backend error, no public APIs found,
+or an unparseable/empty model response) are always emitted as `critical`, so a
+broken backend can never look "clean".
+
+### Stochastic results
+
+Each API is checked with an independent LLM call, capped at the few most
+important issues, so results are **non-deterministic across runs**: precision is
+high (few false positives), but a single run may not surface *every* real issue —
+different runs can catch different ones. For a more exhaustive audit, run a few
+times and combine the results rather than trusting one run to be complete.
 
 ## Pre-commit Hook
 

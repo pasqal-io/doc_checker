@@ -1,13 +1,42 @@
 from __future__ import annotations
 
+import math
+import random
 from pathlib import Path
 
+from doc_checker.constants import SEVERITY_RANK
 from doc_checker.llm_backends import get_backend
-from doc_checker.models import DriftReport, QualityIssue
+from doc_checker.models import DriftReport, QualityIssue, SignatureInfo
 from doc_checker.prompts import get_combined_quality_prompt
 from doc_checker.utils.code_analyzer import CodeAnalyzer
 
 from .base import Checker
+
+
+def _single_issue(
+    api_name: str,
+    message: str,
+    suggestion: str,
+    *,
+    severity: str = "critical",
+    category: str = "error",
+) -> list[QualityIssue]:
+    """One-element issue list for the structural / error early-return paths.
+
+    These returns all carry a single ``critical`` issue with no line reference;
+    factoring them out keeps each call site to its meaningful fields (message,
+    suggestion) instead of repeating the full QualityIssue construction.
+    """
+    return [
+        QualityIssue(
+            api_name=api_name,
+            severity=severity,
+            category=category,
+            message=message,
+            suggestion=suggestion,
+            line_reference=None,
+        )
+    ]
 
 
 class LLMQualityChecker(Checker):
@@ -26,6 +55,7 @@ class LLMQualityChecker(Checker):
         model: str | None = None,
         api_key: str | None = None,
         sample_rate: float = 1.0,
+        min_severity: str = "critical",
         verbose: bool = False,
     ):
         self.root_path = root_path
@@ -35,6 +65,12 @@ class LLMQualityChecker(Checker):
         self.model = model
         self.api_key = api_key
         self.sample_rate = sample_rate
+        if min_severity not in SEVERITY_RANK:
+            raise ValueError(
+                f"Invalid min_severity {min_severity!r}; "
+                f"choose from {sorted(SEVERITY_RANK)}"
+            )
+        self.min_severity = min_severity
         self.verbose = verbose
 
     def check(self, report: DriftReport) -> None:
@@ -52,9 +88,13 @@ class LLMQualityChecker(Checker):
             return
         if self.verbose:
             print(f"LLM quality checks ({self.backend_type}, {checker.backend.model})...")
+        threshold = SEVERITY_RANK[self.min_severity]
         for module in self.modules:
+            issues = checker.check_module_quality(module, self.verbose, self.sample_rate)
             report.quality_issues.extend(
-                checker.check_module_quality(module, self.verbose, self.sample_rate)
+                issue
+                for issue in issues
+                if SEVERITY_RANK.get(issue.severity, 99) >= threshold
             )
 
 
@@ -105,66 +145,86 @@ class QualityChecker:
         api_info = next((api for api in apis if api.name == api_name), None)
 
         if not api_info:
-            return [
-                QualityIssue(
-                    api_name=f"{module_name}.{api_name}",
-                    severity="critical",
-                    category="error",
-                    message=f"API {api_name} not found in module {module_name}",
-                    suggestion="Check API name spelling",
-                    line_reference=None,
-                )
-            ]
+            return _single_issue(
+                f"{module_name}.{api_name}",
+                f"API {api_name} not found in module {module_name}",
+                "Check API name spelling",
+            )
+
+        return self._check_api_info(api_info, verbose)
+
+    def _check_api_info(
+        self, api_info: SignatureInfo, verbose: bool = False
+    ) -> list[QualityIssue]:
+        """Run quality checks on an already-resolved API.
+
+        Takes the SignatureInfo directly (no re-lookup), so callers that already
+        discovered the API — e.g. via get_all_public_apis across submodules — do
+        not get spurious "not found" results. The reported name uses the API's
+        real module so submodule APIs are labelled correctly.
+        """
+        display_name = f"{api_info.module}.{api_info.name}"
 
         if not api_info.docstring:
-            return [
-                QualityIssue(
-                    api_name=f"{module_name}.{api_name}",
-                    severity="critical",
-                    category="completeness",
-                    message="No docstring found",
-                    suggestion="Add docstring explaining what this API does",
-                    line_reference=None,
-                )
-            ]
+            return _single_issue(
+                display_name,
+                "No docstring found",
+                "Add docstring explaining what this API does",
+                category="completeness",
+            )
 
-        # Build signature string
-        params_str = ", ".join(api_info.parameters)
-        return_str = (
-            f" -> {api_info.return_annotation}" if api_info.return_annotation else ""
-        )
-        signature = f"def {api_name}({params_str}){return_str}"
+        # Prefer inspect.signature's faithful rendering (keeps "*", keyword-only
+        # markers, full annotations); fall back to the reconstructed form.
+        if api_info.signature is not None:
+            signature = f"def {api_info.name}{api_info.signature}"
+        else:
+            params_str = ", ".join(api_info.parameters)
+            return_str = (
+                f" -> {api_info.return_annotation}" if api_info.return_annotation else ""
+            )
+            signature = f"def {api_info.name}({params_str}){return_str}"
 
         if verbose:
-            print(f"  Checking {module_name}.{api_name}...")
+            print(f"  Checking {display_name}...")
+
+        # Source fetched on demand so only APIs reaching the LLM pay the
+        # inspect.getsource cost; a pre-set excerpt (e.g. in tests) wins.
+        code_snippet = api_info.source_excerpt or self.code_analyzer.get_source_excerpt(
+            api_info.module, api_info.name
+        )
 
         # Get LLM evaluation
         prompt = get_combined_quality_prompt(
             signature=signature,
             docstring=api_info.docstring,
-            api_name=f"{module_name}.{api_name}",
+            api_name=display_name,
+            code_snippet=code_snippet,
         )
 
         try:
             response = self.backend.generate_json(prompt)
         except Exception as e:
-            return [
-                QualityIssue(
-                    api_name=f"{module_name}.{api_name}",
-                    severity="warning",
-                    category="error",
-                    message=f"LLM check failed: {e}",
-                    suggestion="Check LLM backend connection",
-                    line_reference=None,
-                )
-            ]
+            return _single_issue(
+                display_name,
+                f"LLM check failed: {e}",
+                "Check LLM backend connection",
+            )
+
+        # An unparseable/empty response carries an "error" key + no issues; surface
+        # it as critical instead of reporting a falsely clean API.
+        if response.get("error"):
+            return _single_issue(
+                display_name,
+                f"LLM response could not be parsed: {response['error']}",
+                "Model returned malformed or empty output; re-run",
+            )
 
         # Parse response
         issues = []
         for issue_data in response.get("issues", []):
             issues.append(
                 QualityIssue(
-                    api_name=f"{module_name}.{api_name}",
+                    api_name=display_name,
                     severity=issue_data.get("severity", "warning"),
                     category=issue_data.get("category", "unknown"),
                     message=issue_data.get("message", "No message"),
@@ -174,7 +234,7 @@ class QualityChecker:
             )
 
         if verbose and issues:
-            print(f"    Found {len(issues)} issues (score: {response.get('score', 0)})")
+            print(f"    Found {len(issues)} issues")
 
         return issues
 
@@ -191,8 +251,6 @@ class QualityChecker:
         Returns:
             List of all quality issues found
         """
-        import random
-
         apis, _ = self.code_analyzer.get_all_public_apis(
             module_name, self.ignore_submodules
         )
@@ -200,26 +258,40 @@ class QualityChecker:
         if not apis:
             if verbose:
                 print(f"No public APIs found in {module_name}")
-            return [
-                QualityIssue(
-                    api_name=module_name,
-                    severity="warning",
-                    category="error",
-                    message=f"No public APIs found in module {module_name}",
-                    suggestion="Check module name or ensure it is installed",
-                    line_reference=None,
+            return _single_issue(
+                module_name,
+                f"No public APIs found in module {module_name}",
+                "Check module name or ensure it is installed",
+            )
+
+        # Dedupe re-exports by canonical identity (defining module + qualname) so
+        # duplicates merge but distinct same-named APIs stay separate (contract fallback).
+        unique_apis: list[SignatureInfo] = []
+        seen: set[object] = set()
+        for api in apis:
+            key: object = self.code_analyzer.get_canonical_key(api.module, api.name)
+            if key is None:
+                key = (
+                    api.name,
+                    tuple(api.parameters),
+                    api.return_annotation,
+                    api.docstring,
                 )
-            ]
+            if key not in seen:
+                seen.add(key)
+                unique_apis.append(api)
 
         if sample_rate < 1.0:
-            apis = random.sample(apis, int(len(apis) * sample_rate))
+            # Round up so a small module with positive sample_rate still checks at
+            # least one API instead of truncating to zero (int(1 * 0.5) == 0).
+            k = max(1, math.ceil(len(unique_apis) * sample_rate))
+            unique_apis = random.sample(unique_apis, k)
 
         if verbose:
-            print(f"Checking {len(apis)} APIs in {module_name}...")
+            print(f"Checking {len(unique_apis)} APIs in {module_name}...")
 
         all_issues = []
-        for api in apis:
-            issues = self.check_api_quality(api.name, module_name, verbose)
-            all_issues.extend(issues)
+        for api in unique_apis:
+            all_issues.extend(self._check_api_info(api, verbose))
 
         return all_issues

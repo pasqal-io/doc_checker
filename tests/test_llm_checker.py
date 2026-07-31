@@ -7,8 +7,19 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from doc_checker.checkers_folder.quality import QualityChecker
-from doc_checker.models import SignatureInfo
+from doc_checker.checkers_folder.quality import LLMQualityChecker, QualityChecker
+from doc_checker.models import DriftReport, QualityIssue, SignatureInfo
+
+
+def _issue(severity: str) -> QualityIssue:
+    return QualityIssue(
+        api_name="m.api",
+        severity=severity,
+        category="clarity",
+        message="msg",
+        suggestion="fix",
+        line_reference=None,
+    )
 
 
 @pytest.fixture
@@ -57,6 +68,9 @@ def mock_code_analyzer(tmp_path: Path):
     ]
     analyzer.get_public_apis.return_value = apis
     analyzer.get_all_public_apis.return_value = (apis, set())
+    # Fall back to content-based dedup (distinct names stay distinct) instead of
+    # a shared MagicMock identity that would collapse all APIs into one.
+    analyzer.get_canonical_key.return_value = None
     return analyzer
 
 
@@ -97,6 +111,37 @@ def test_quality_checker_check_api_quality_success(
     assert issues[0].message == "Test issue"
     assert issues[0].suggestion == "Fix it"
     assert issues[0].line_reference == "test text"
+
+
+@patch("doc_checker.checkers_folder.quality.get_combined_quality_prompt")
+@patch("doc_checker.checkers_folder.quality.get_backend")
+@patch("doc_checker.checkers_folder.quality.CodeAnalyzer")
+def test_quality_checker_forwards_source_excerpt(
+    mock_analyzer_class, mock_get_backend, mock_prompt, tmp_path, mock_backend
+):
+    """check_api_quality passes the API's source excerpt to the prompt builder."""
+    api = SignatureInfo(
+        name="test_func",
+        module="test_module",
+        parameters=["x: int"],
+        return_annotation="bool",
+        docstring="Docstring.",
+        is_public=True,
+        kind="function",
+        source_excerpt="def test_func(x):\n    return x > 0",
+    )
+    analyzer = MagicMock()
+    analyzer.get_public_apis.return_value = [api]
+    mock_analyzer_class.return_value = analyzer
+    mock_get_backend.return_value = mock_backend
+    mock_prompt.return_value = "prompt"
+
+    checker = QualityChecker(tmp_path)
+    checker.check_api_quality("test_func", "test_module")
+
+    assert mock_prompt.call_args.kwargs["code_snippet"] == (
+        "def test_func(x):\n    return x > 0"
+    )
 
 
 @patch("doc_checker.checkers_folder.quality.get_backend")
@@ -150,9 +195,33 @@ def test_quality_checker_llm_failure(
     issues = checker.check_api_quality("test_func", "test_module")
 
     assert len(issues) == 1
-    assert issues[0].severity == "warning"
+    assert issues[0].severity == "critical"
     assert issues[0].category == "error"
     assert "LLM check failed" in issues[0].message
+
+
+@patch("doc_checker.checkers_folder.quality.get_backend")
+@patch("doc_checker.checkers_folder.quality.CodeAnalyzer")
+def test_quality_checker_surfaces_parse_failure(
+    mock_analyzer_class, mock_get_backend, tmp_path, mock_code_analyzer
+):
+    """An unparseable/empty LLM response is reported, not silently dropped."""
+    mock_backend = MagicMock()
+    mock_backend.generate_json.return_value = {
+        "error": "Failed to parse JSON: Expecting value",
+        "raw_response": "",
+        "issues": [],
+    }
+    mock_get_backend.return_value = mock_backend
+    mock_analyzer_class.return_value = mock_code_analyzer
+
+    checker = QualityChecker(tmp_path)
+    issues = checker.check_api_quality("test_func", "test_module")
+
+    assert len(issues) == 1
+    assert issues[0].severity == "critical"
+    assert issues[0].category == "error"
+    assert "could not be parsed" in issues[0].message
 
 
 @patch("doc_checker.checkers_folder.quality.get_backend")
@@ -175,7 +244,6 @@ def test_quality_checker_verbose_output(
     captured = capsys.readouterr()
     assert "Checking test_module.test_func" in captured.out
     assert "Found 1 issues" in captured.out
-    assert "score: 85" in captured.out
 
 
 @patch("doc_checker.checkers_folder.quality.get_backend")
@@ -220,6 +288,7 @@ def test_quality_checker_sample_rate(
     mock_analyzer = MagicMock()
     mock_analyzer.get_public_apis.return_value = apis
     mock_analyzer.get_all_public_apis.return_value = (apis, set())
+    mock_analyzer.get_canonical_key.return_value = None
     mock_analyzer_class.return_value = mock_analyzer
     mock_get_backend.return_value = mock_backend
 
@@ -229,6 +298,75 @@ def test_quality_checker_sample_rate(
     # Should check ~3 APIs (30% of 10)
     # Each API generates 1 issue, so ~3 issues
     assert 1 <= len(issues) <= 5  # Allow some variance due to random sampling
+
+
+@patch("doc_checker.checkers_folder.quality.get_backend")
+@patch("doc_checker.checkers_folder.quality.CodeAnalyzer")
+def test_quality_checker_dedup_uses_canonical_identity(
+    mock_analyzer_class, mock_get_backend, tmp_path, mock_backend
+):
+    """Distinct objects sharing name/params/docstring are both checked; a true
+    re-export (same canonical identity) collapses to one."""
+
+    def api(module: str) -> SignatureInfo:
+        # Identical contract across all three, so content-based dedup would
+        # wrongly merge them; only canonical identity keeps the distinct ones.
+        return SignatureInfo(
+            name="Writer",
+            module=module,
+            parameters=["self"],
+            return_annotation=None,
+            docstring="Initialize.",
+            is_public=True,
+            kind="class",
+        )
+
+    apis = [api("pkg.io"), api("pkg.plot"), api("pkg")]  # last re-exports pkg.io
+    mock_analyzer = MagicMock()
+    mock_analyzer.get_all_public_apis.return_value = (apis, set())
+    mock_analyzer.get_canonical_key.side_effect = lambda module, name: {
+        "pkg.io": ("pkg.io", "Writer"),
+        "pkg.plot": ("pkg.plot", "Writer"),
+        "pkg": ("pkg.io", "Writer"),  # re-export resolves to pkg.io's object
+    }[module]
+    mock_analyzer_class.return_value = mock_analyzer
+    mock_get_backend.return_value = mock_backend
+
+    checker = QualityChecker(tmp_path)
+    issues = checker.check_module_quality("pkg", verbose=False)
+
+    # Two distinct Writers checked (io + plot); the pkg re-export merged into io.
+    assert len(issues) == 2
+
+
+@patch("doc_checker.checkers_folder.quality.get_backend")
+@patch("doc_checker.checkers_folder.quality.CodeAnalyzer")
+def test_quality_checker_sample_rate_small_module_checks_at_least_one(
+    mock_analyzer_class, mock_get_backend, tmp_path, mock_backend
+):
+    """A tiny module with a positive sample_rate must not sample zero APIs."""
+    apis = [
+        SignatureInfo(
+            name="only_func",
+            module="test_module",
+            parameters=[],
+            return_annotation=None,
+            docstring="Only function.",
+            is_public=True,
+            kind="function",
+        )
+    ]
+    mock_analyzer = MagicMock()
+    mock_analyzer.get_all_public_apis.return_value = (apis, set())
+    mock_analyzer.get_canonical_key.return_value = None
+    mock_analyzer_class.return_value = mock_analyzer
+    mock_get_backend.return_value = mock_backend
+
+    checker = QualityChecker(tmp_path)
+    # int(1 * 0.1) == 0 would silently check nothing; ceil+max(1, ...) checks one.
+    issues = checker.check_module_quality("test_module", verbose=False, sample_rate=0.1)
+
+    assert len(issues) == 1
 
 
 @patch("doc_checker.checkers_folder.quality.get_backend")
@@ -315,3 +453,50 @@ def test_quality_checker_empty_module(
 
     assert len(issues) == 1
     assert "No public APIs found" in issues[0].message
+
+
+@patch("doc_checker.checkers_folder.quality.QualityChecker")
+def test_llm_quality_checker_filters_below_min_severity(mock_qc_class, tmp_path):
+    """LLMQualityChecker drops issues below min_severity before they reach the report."""
+    inner = MagicMock()
+    inner.backend.model = "fake-model"
+    inner.check_module_quality.return_value = [
+        _issue("suggestion"),
+        _issue("warning"),
+        _issue("critical"),
+    ]
+    mock_qc_class.return_value = inner
+
+    checker = LLMQualityChecker(tmp_path, ["m"], set(), min_severity="warning")
+    report = DriftReport()
+    checker.check(report)
+
+    kept = {i.severity for i in report.quality_issues}
+    assert kept == {"warning", "critical"}
+
+
+@patch("doc_checker.checkers_folder.quality.QualityChecker")
+def test_llm_quality_checker_default_keeps_only_critical(mock_qc_class, tmp_path):
+    """Default min_severity is critical; lower severities are dropped, unknown kept."""
+    inner = MagicMock()
+    inner.backend.model = "fake-model"
+    inner.check_module_quality.return_value = [
+        _issue("suggestion"),
+        _issue("warning"),
+        _issue("critical"),
+        _issue("mystery"),
+    ]
+    mock_qc_class.return_value = inner
+
+    checker = LLMQualityChecker(tmp_path, ["m"], set())
+    report = DriftReport()
+    checker.check(report)
+
+    kept = {i.severity for i in report.quality_issues}
+    assert kept == {"critical", "mystery"}
+
+
+def test_llm_quality_checker_rejects_invalid_min_severity(tmp_path):
+    """An invalid min_severity fails fast with a clear error, not a later KeyError."""
+    with pytest.raises(ValueError, match="Invalid min_severity"):
+        LLMQualityChecker(tmp_path, ["m"], set(), min_severity="warn")

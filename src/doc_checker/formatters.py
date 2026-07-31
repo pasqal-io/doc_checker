@@ -81,17 +81,20 @@ def format_report(report: DriftReport) -> str:
             "suggestion": [],
         }
         for issue in report.quality_issues:
-            by_severity[issue.severity].append(issue)
+            by_severity.setdefault(issue.severity, []).append(issue)
 
-        for severity in ["critical", "warning", "suggestion"]:
-            issues = by_severity[severity]
+        severity_icon = {"critical": "✘", "warning": "⚠", "suggestion": "ℹ"}
+        # Unknown severities (off-menu LLM values the min-severity filter keeps)
+        # are appended last rather than crashing the report.
+        known = ["critical", "warning", "suggestion"]
+        extra = [s for s in by_severity if s not in known]
+        for severity in [*known, *extra]:
+            issues = by_severity.get(severity, [])
             if not issues:
                 continue
 
-            severity_icon = {"critical": "✘", "warning": "⚠", "suggestion": "ℹ"}
-            lines.append(
-                f"  {severity_icon[severity]} {severity.upper()} ({len(issues)}):"
-            )  # noqa: E501
+            icon = severity_icon.get(severity, "•")
+            lines.append(f"  {icon} {severity.upper()} ({len(issues)}):")  # noqa: E501
             for issue in issues:
                 lines.append(f"    {issue.api_name} [{issue.category}]")
                 lines.append(f"      Issue: {issue.message}")

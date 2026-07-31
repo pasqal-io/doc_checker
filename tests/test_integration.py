@@ -189,6 +189,26 @@ def test_format_report_external_links_summary():
     assert "External links" not in output_none
 
 
+def test_format_report_unknown_quality_severity_does_not_crash():
+    """An off-menu severity (LLMs occasionally emit one) must render, not KeyError."""
+    from doc_checker.models import QualityIssue
+
+    report = DriftReport()
+    report.quality_issues.append(
+        QualityIssue(
+            api_name="my_lib.foo",
+            severity="moderate",  # not critical/warning/suggestion
+            category="clarity",
+            message="msg",
+            suggestion="fix",
+            line_reference=None,
+        )
+    )
+    output = format_report(report)
+    assert "MODERATE (1)" in output
+    assert "my_lib.foo" in output
+
+
 def test_integration_with_quality_checks_mocked(integration_project: Path):
     """Test integration with mocked LLM quality checks."""
     mock_checker = MagicMock()
@@ -217,7 +237,11 @@ def test_integration_with_quality_checks_mocked(integration_project: Path):
         "doc_checker.checkers_folder.quality.QualityChecker"
     ) as mock_checker_class:
         mock_checker_class.return_value = mock_checker
-        report = detector.check_all(check_quality=True, verbose=False)
+        report = detector.check_all(
+            check_quality=True,
+            quality_min_severity="suggestion",
+            verbose=False,
+        )
 
     assert len(report.quality_issues) == 2
     assert report.has_issues() is True

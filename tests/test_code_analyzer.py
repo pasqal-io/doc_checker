@@ -98,6 +98,76 @@ class TestCodeAnalyzer:
         assert "int" in func_api.return_annotation
         assert func_api.docstring == "A public function."
 
+    def test_function_source_excerpt(self, sample_module: ModuleType, tmp_path: Path):
+        analyzer = CodeAnalyzer(tmp_path)
+        excerpt = analyzer.get_source_excerpt("test_module", "public_function")
+        assert excerpt is not None
+        assert "return x + y" in excerpt
+
+    def test_class_source_excerpt_prefers_init(
+        self, sample_module: ModuleType, tmp_path: Path
+    ):
+        analyzer = CodeAnalyzer(tmp_path)
+        excerpt = analyzer.get_source_excerpt("test_module", "PublicClass")
+        assert excerpt is not None
+        assert "self.param1 = param1" in excerpt
+
+    def test_source_excerpt_not_populated_during_discovery(
+        self, sample_module: ModuleType, tmp_path: Path
+    ):
+        """Discovery skips source extraction; it is fetched on demand only."""
+        analyzer = CodeAnalyzer(tmp_path)
+        apis = analyzer.get_public_apis("test_module")
+        assert all(api.source_excerpt is None for api in apis)
+
+    def test_enum_signature_drops_machinery_params(self, tmp_path: Path):
+        """Enum signatures exclude the value/names/module/... machinery params."""
+        module_dir = tmp_path / "enum_module"
+        module_dir.mkdir()
+        (module_dir / "__init__.py").write_text(
+            "import enum\n"
+            '__all__ = ["Color"]\n'
+            "class Color(enum.Enum):\n"
+            '    """Colors."""\n'
+            "    RED = 1\n"
+            "    GREEN = 2\n"
+        )
+        sys.path.insert(0, str(tmp_path))
+        try:
+            analyzer = CodeAnalyzer(tmp_path)
+            api = next(
+                a for a in analyzer.get_public_apis("enum_module") if a.name == "Color"
+            )
+            assert api.signature is not None
+            for junk in ("value", "names", "module", "qualname"):
+                assert junk not in api.signature
+            assert api.parameters == []
+        finally:
+            sys.modules.pop("enum_module", None)
+
+    def test_signature_is_faithful(self, tmp_path: Path):
+        """signature preserves the keyword-only '*' marker and annotations."""
+        module_dir = tmp_path / "sig_module"
+        module_dir.mkdir()
+        (module_dir / "__init__.py").write_text(
+            '__all__ = ["kw_only"]\n'
+            "def kw_only(a: int, *, b: str = 'x') -> bool:\n"
+            '    """Doc."""\n'
+            "    return True\n"
+        )
+        sys.path.insert(0, str(tmp_path))
+        try:
+            analyzer = CodeAnalyzer(tmp_path)
+            api = next(
+                a for a in analyzer.get_public_apis("sig_module") if a.name == "kw_only"
+            )
+            assert api.signature is not None
+            # The '*' marker (lost by the old reconstruction) must survive.
+            assert "*" in api.signature
+            assert api.signature == "(a: int, *, b: str = 'x') -> bool"
+        finally:
+            sys.modules.pop("sig_module", None)
+
     def test_parameter_formatting(self, sample_module: ModuleType, tmp_path: Path):
         analyzer = CodeAnalyzer(tmp_path)
         apis = analyzer.get_public_apis("test_module")
