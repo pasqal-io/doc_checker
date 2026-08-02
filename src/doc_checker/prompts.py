@@ -38,7 +38,10 @@ ISSUES_SCHEMA: dict[str, Any] = {
                     },
                     "message": {"type": "string"},
                     "suggestion": {"type": "string"},
-                    "line_reference": {"type": ["string", "null"]},
+                    # anyOf is the documented nullable form for structured
+                    # outputs (type arrays are not); matches what the SDK's own
+                    # schema transformer emits.
+                    "line_reference": {"anyOf": [{"type": "string"}, {"type": "null"}]},
                 },
                 "required": [
                     "severity",
