@@ -88,8 +88,22 @@ def test_quality_checker_init(mock_analyzer_class, mock_get_backend, tmp_path):
 
     assert checker.root_path == tmp_path
     assert checker.backend == mock_backend
-    mock_get_backend.assert_called_once_with("ollama", "qwen2.5:3b", None)
+    mock_get_backend.assert_called_once_with(
+        "ollama", "qwen2.5:3b", None, effort="medium"
+    )
     mock_analyzer_class.assert_called_once_with(tmp_path)
+
+
+@patch("doc_checker.checkers_folder.quality.get_backend")
+@patch("doc_checker.checkers_folder.quality.CodeAnalyzer")
+def test_quality_checker_forwards_effort(mock_analyzer_class, mock_get_backend, tmp_path):
+    """Test QualityChecker forwards effort to get_backend (anthropic lever)."""
+    mock_get_backend.return_value = MagicMock()
+    mock_analyzer_class.return_value = MagicMock()
+
+    QualityChecker(tmp_path, backend_type="anthropic", api_key="k", effort="low")
+
+    mock_get_backend.assert_called_once_with("anthropic", None, "k", effort="low")
 
 
 @patch("doc_checker.checkers_folder.quality.get_backend")

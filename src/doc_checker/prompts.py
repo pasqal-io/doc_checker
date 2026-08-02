@@ -5,6 +5,56 @@
 
 from __future__ import annotations
 
+from typing import Any
+
+# JSON schema for the response requested by get_combined_quality_prompt below.
+# Used by AnthropicBackend as a structured-outputs schema (API-guaranteed valid
+# JSON). Structured outputs require additionalProperties: false and full
+# "required" lists on every object.
+ISSUES_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "properties": {
+        "issues": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "severity": {
+                        "type": "string",
+                        "enum": ["critical", "warning", "suggestion"],
+                    },
+                    "category": {
+                        "type": "string",
+                        "enum": [
+                            "grammar",
+                            "clarity",
+                            "style",
+                            "params",
+                            "returns",
+                            "exceptions",
+                            "completeness",
+                            "accuracy",
+                        ],
+                    },
+                    "message": {"type": "string"},
+                    "suggestion": {"type": "string"},
+                    "line_reference": {"type": ["string", "null"]},
+                },
+                "required": [
+                    "severity",
+                    "category",
+                    "message",
+                    "suggestion",
+                    "line_reference",
+                ],
+                "additionalProperties": False,
+            },
+        }
+    },
+    "required": ["issues"],
+    "additionalProperties": False,
+}
+
 
 def get_combined_quality_prompt(
     signature: str, docstring: str, api_name: str, code_snippet: str | None = None

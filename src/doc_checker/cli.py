@@ -37,14 +37,22 @@ def main() -> int:
     )
     parser.add_argument(
         "--llm-backend",
-        choices=["ollama", "openai"],
+        choices=["ollama", "openai", "anthropic"],
         default="ollama",
         help="LLM backend to use (default: ollama)",
     )
     parser.add_argument(
         "--llm-model",
         type=str,
-        help="LLM model name (defaults: qwen3:1.7b for ollama, gpt-5.6-sol for openai)",
+        help="LLM model name (defaults: qwen3:1.7b for ollama, gpt-5.6-sol for "
+        "openai, claude-opus-5 for anthropic)",
+    )
+    parser.add_argument(
+        "--llm-effort",
+        choices=["low", "medium", "high", "xhigh", "max"],
+        default="medium",
+        help="Effort level for the anthropic backend (default: medium; "
+        "lower is faster/cheaper, ignored by other backends)",
     )
     parser.add_argument(
         "--quality-sample",
@@ -114,13 +122,18 @@ def main() -> int:
         ignore_submodules=args.ignore_submodules,
     )
 
-    # Get API key for OpenAI if needed
+    # Get API key for cloud backends if needed
+    key_envs = {
+        "openai": ("OPENAI_API_KEY", "sk-proj-..."),
+        "anthropic": ("ANTHROPIC_API_KEY", "sk-ant-api03-..."),
+    }
     api_key = None
-    if args.check_quality and args.llm_backend == "openai":
-        api_key = os.getenv("OPENAI_API_KEY")
+    if args.check_quality and args.llm_backend in key_envs:
+        env_var, key_hint = key_envs[args.llm_backend]
+        api_key = os.getenv(env_var)
         if not api_key:
-            print("Error: OPENAI_API_KEY environment variable not set", file=sys.stderr)
-            print("Set with: export OPENAI_API_KEY='sk-proj-...'", file=sys.stderr)
+            print(f"Error: {env_var} environment variable not set", file=sys.stderr)
+            print(f"Set with: export {env_var}='{key_hint}'", file=sys.stderr)
             return 1
 
     # Run checks
@@ -139,6 +152,7 @@ def main() -> int:
             quality_api_key=api_key,
             quality_sample_rate=args.quality_sample,
             quality_min_severity=args.quality_min_severity,
+            quality_effort=args.llm_effort,
             verbose=args.verbose,
         )
 

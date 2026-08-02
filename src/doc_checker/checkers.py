@@ -65,6 +65,7 @@ class DriftDetector:
         quality_api_key: str | None = None,
         quality_sample_rate: float = 1.0,
         quality_min_severity: str = "critical",
+        quality_effort: str = "medium",
         verbose: bool = False,
         skip_basic_checks: bool = False,
     ) -> DriftReport:
@@ -77,10 +78,12 @@ class DriftDetector:
         Args:
             check_external_links: Validate HTTP/HTTPS links via async requests.
             check_quality: Run LLM quality analysis on docstrings.
-            quality_backend: LLM backend ("ollama" or "openai").
+            quality_backend: LLM backend ("ollama", "openai" or "anthropic").
             quality_model: Model name override (defaults per backend).
-            quality_api_key: API key for openai backend.
+            quality_api_key: API key for cloud backends.
             quality_sample_rate: Fraction of APIs to check (0.0-1.0).
+            quality_effort: Effort level for the anthropic backend
+                (low|medium|high|xhigh|max; ignored by other backends).
             quality_min_severity: Drop quality issues below this severity
                 ("suggestion", "warning", or "critical"). Default "critical"
                 reports only the most important issues.
@@ -96,6 +99,7 @@ class DriftDetector:
             report.llm_model = quality_model or {
                 "ollama": "qwen3:1.7b",
                 "openai": "gpt-5.6-sol",
+                "anthropic": "claude-opus-5",
             }.get(quality_backend)
         self._warn_unmatched_ignores(report)
         checkers: list[Checker] = []
@@ -144,6 +148,7 @@ class DriftDetector:
                     quality_sample_rate,
                     quality_min_severity,
                     verbose,
+                    quality_effort,
                 )
             )
         for checker in checkers:

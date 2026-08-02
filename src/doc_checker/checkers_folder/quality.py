@@ -42,7 +42,7 @@ def _single_issue(
 class LLMQualityChecker(Checker):
     """LLM-based docstring quality analysis.
 
-    Supports ollama and openai backends. Checks docstring completeness,
+    Supports ollama, openai and anthropic backends. Checks docstring completeness,
     clarity, and accuracy for public APIs.
     """
 
@@ -57,6 +57,7 @@ class LLMQualityChecker(Checker):
         sample_rate: float = 1.0,
         min_severity: str = "critical",
         verbose: bool = False,
+        effort: str = "medium",
     ):
         self.root_path = root_path
         self.modules = modules
@@ -64,6 +65,7 @@ class LLMQualityChecker(Checker):
         self.backend_type = backend_type
         self.model = model
         self.api_key = api_key
+        self.effort = effort
         self.sample_rate = sample_rate
         if min_severity not in SEVERITY_RANK:
             raise ValueError(
@@ -82,6 +84,7 @@ class LLMQualityChecker(Checker):
                 self.model,
                 self.api_key,
                 ignore_submodules=self.ignore_submodules,
+                effort=self.effort,
             )
         except (ImportError, RuntimeError, ValueError) as e:
             report.warnings.append(f"Quality checks skipped: {e}")
@@ -108,15 +111,17 @@ class QualityChecker:
         model: str | None = None,
         api_key: str | None = None,
         ignore_submodules: set[str] | None = None,
+        effort: str = "medium",
     ):
         """Initialize quality checker.
 
         Args:
             root_path: Project root path
-            backend_type: "ollama" (default) or "openai"
+            backend_type: "ollama" (default), "openai" or "anthropic"
             model: Model name (uses defaults if None)
             api_key: API key for cloud backends
             ignore_submodules: Submodule names to skip.
+            effort: Effort level for the anthropic backend (ignored by others).
 
         Raises:
             ImportError: If backend package not installed
@@ -124,7 +129,7 @@ class QualityChecker:
         """
         self.root_path = root_path
         self.code_analyzer = CodeAnalyzer(root_path)
-        self.backend = get_backend(backend_type, model, api_key)
+        self.backend = get_backend(backend_type, model, api_key, effort=effort)
         self.ignore_submodules = ignore_submodules
 
     def check_api_quality(

@@ -30,7 +30,8 @@ pip install -e .
 pip install -e ".[async]"         # async link checking (recommended)
 pip install -e ".[llm]"           # LLM quality checks (ollama)
 pip install -e ".[llm-openai]"    # LLM quality checks (openai)
-pip install -e ".[llm-all]"       # LLM quality checks (ollama + openai)
+pip install -e ".[llm-anthropic]" # LLM quality checks (anthropic/claude)
+pip install -e ".[llm-all]"       # LLM quality checks (ollama + openai + anthropic)
 pip install -e ".[dev]"           # all dev dependencies
 ```
 
@@ -49,9 +50,12 @@ doc-checker --modules my_package --check-basic --root /path/to/project
 # External HTTP link validation only (slow)
 doc-checker --modules my_package --check-external-links --root /path/to/project
 
-# LLM quality checks (default: ollama/qwen3:1.7b, openai/gpt-5.6-sol)
+# LLM quality checks (defaults: ollama/qwen3:1.7b, openai/gpt-5.6-sol,
+# anthropic/claude-opus-5)
 doc-checker --modules my_package --check-quality --root /path/to/project
 doc-checker --modules my_package --check-quality --llm-backend openai --root .
+doc-checker --modules my_package --check-quality --llm-backend anthropic --root .
+doc-checker --modules my_package --check-quality --llm-backend anthropic --llm-effort low --root .
 doc-checker --modules my_package --check-quality --llm-model gpt-5.6-sol --root .
 doc-checker --modules my_package --check-quality --quality-sample 0.1 --root .
 
@@ -83,6 +87,13 @@ doc-checker --modules my_package --check-basic -v --root /path/to/project
 > parameter. Pointing `--llm-model` at older non-reasoning chat models
 > (e.g. `gpt-4o`) is unsupported *by the openai backend*. For non-reasoning /
 > non-thinking or local models, use the `ollama` backend, which runs any model.
+
+> **Anthropic backend.** The `anthropic` backend (default `claude-opus-5`) needs
+> `ANTHROPIC_API_KEY` set. It uses structured outputs, so responses are
+> API-guaranteed valid JSON. `--llm-effort {low,medium,high,xhigh,max}`
+> (default `medium`) is the speed/cost lever — Claude Opus 5 always thinks, and
+> lower effort caps thinking depth. Sampling params (`temperature` etc.) are
+> not sent; Claude Opus 5 rejects them.
 
 ### Quality severity
 
