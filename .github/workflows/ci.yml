@@ -52,7 +52,7 @@ jobs:
         run: |
           pip install -e ".${{ matrix.extras }}"
           pip install pytest pytest-asyncio pytest-cov
-          pip install ollama openai
+          pip install ollama openai anthropic
 
       - name: Run tests
         run: pytest -v --cov=doc_checker --cov-report=term-missing --cov-report=xml
