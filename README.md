@@ -93,7 +93,9 @@ doc-checker --modules my_package --check-basic -v --root /path/to/project
 > API-guaranteed valid JSON. `--llm-effort {low,medium,high,xhigh,max}`
 > (default `medium`) is the speed/cost lever — Claude Opus 5 always thinks, and
 > lower effort caps thinking depth. Sampling params (`temperature` etc.) are
-> not sent; Claude Opus 5 rejects them.
+> not sent; Claude Opus 5 rejects them. Thinking counts against the response
+> token budget, so if an API is reported as `LLM stopped early:
+> stop_reason=max_tokens`, re-run with `--llm-effort low`.
 
 ### Quality severity
 
