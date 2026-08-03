@@ -42,8 +42,8 @@ def _single_issue(
 class LLMQualityChecker(Checker):
     """LLM-based docstring quality analysis.
 
-    Supports ollama, openai and anthropic backends. Checks docstring completeness,
-    clarity, and accuracy for public APIs.
+    Supports ollama, openai, anthropic and claude-cli backends. Checks docstring
+    completeness, clarity, and accuracy for public APIs.
     """
 
     def __init__(
@@ -117,7 +117,7 @@ class QualityChecker:
 
         Args:
             root_path: Project root path
-            backend_type: "ollama" (default), "openai" or "anthropic"
+            backend_type: "ollama" (default), "openai", "anthropic" or "claude-cli"
             model: Model name (uses defaults if None)
             api_key: API key for cloud backends
             ignore_submodules: Submodule names to skip.

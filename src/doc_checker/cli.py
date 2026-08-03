@@ -11,6 +11,7 @@ from pathlib import Path
 
 from .checkers import DriftDetector
 from .formatters import format_report
+from .llm_backends import VALID_EFFORTS
 
 
 def main() -> int:
@@ -51,7 +52,7 @@ def main() -> int:
     )
     parser.add_argument(
         "--llm-effort",
-        choices=["low", "medium", "high", "xhigh", "max"],
+        choices=sorted(VALID_EFFORTS),
         default="medium",
         help="Effort level for the anthropic backend (default: medium; "
         "lower is faster/cheaper, ignored by other backends)",

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -510,4 +511,36 @@ class TestWarnOnly:
             str(integration_project),
         ]
         with patch("sys.argv", argv):
+            assert main() == 1
+
+
+class TestQualityPreflight:
+    """Test CLI pre-flight exits for explicit --check-quality."""
+
+    def _argv(self, integration_project: Path, backend: str) -> list[str]:
+        return [
+            "doc-checker",
+            "--check-quality",
+            "--llm-backend",
+            backend,
+            "--modules",
+            "my_lib",
+            "--root",
+            str(integration_project),
+        ]
+
+    def test_anthropic_missing_key_exits_one(self, integration_project: Path):
+        """Explicit --check-quality + anthropic without key exits 1, no network."""
+        argv = self._argv(integration_project, "anthropic")
+        env = {k: v for k, v in os.environ.items() if k != "ANTHROPIC_API_KEY"}
+        with patch("sys.argv", argv), patch.dict("os.environ", env, clear=True):
+            assert main() == 1
+
+    def test_claude_cli_missing_binary_exits_one(self, integration_project: Path):
+        """Explicit --check-quality + claude-cli without binary exits 1."""
+        argv = self._argv(integration_project, "claude-cli")
+        with (
+            patch("sys.argv", argv),
+            patch("doc_checker.cli.shutil.which", return_value=None),
+        ):
             assert main() == 1
