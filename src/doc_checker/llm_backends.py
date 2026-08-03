@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
+import subprocess
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, Any, cast
 
@@ -228,6 +230,67 @@ class AnthropicBackend(LLMBackend):
         return next((b.text for b in response.content if b.type == "text"), "")
 
 
+class ClaudeCliBackend(LLMBackend):
+    """Claude Code CLI backend (``claude -p``, subscription auth, no API key).
+
+    Validation/dev fallback: rides the local ``claude login`` session instead
+    of ``ANTHROPIC_API_KEY``. No structured outputs — relies on the prompt's
+    JSON instruction and ``generate_json``'s parse fallback. Serial subprocess
+    per API checked, so slower than the SDK backends.
+    """
+
+    def __init__(self, model: str = "claude-opus-5"):
+        """Initialize Claude CLI backend.
+
+        Args:
+            model: Model name or alias passed to ``claude --model``
+
+        Raises:
+            RuntimeError: If the ``claude`` binary is not on PATH
+        """
+        if shutil.which("claude") is None:
+            raise RuntimeError(
+                "claude CLI not found on PATH. Install Claude Code and run: claude login"
+            )
+        self.model = model
+
+    def generate(self, prompt: str) -> str:
+        """Generate completion via a headless ``claude -p`` subprocess.
+
+        Prompt goes through stdin (avoids argv length limits on long code
+        excerpts). Failures return the error-JSON contract so the quality
+        checker reports a critical issue instead of a falsely clean API.
+        """
+        try:
+            proc = subprocess.run(
+                ["claude", "-p", "--output-format", "json", "--model", self.model],
+                input=prompt,
+                capture_output=True,
+                text=True,
+                timeout=600,
+            )
+        except subprocess.TimeoutExpired:
+            return json.dumps({"error": "claude CLI timed out (600s)", "issues": []})
+        if proc.returncode != 0:
+            return json.dumps(
+                {
+                    "error": f"claude CLI failed: {proc.stderr.strip()[:500]}",
+                    "issues": [],
+                }
+            )
+        try:
+            wrapper = json.loads(proc.stdout)
+        except json.JSONDecodeError as e:
+            return json.dumps(
+                {"error": f"claude CLI returned invalid JSON: {e}", "issues": []}
+            )
+        if wrapper.get("is_error"):
+            return json.dumps(
+                {"error": f"claude CLI error: {wrapper.get('result', '')}", "issues": []}
+            )
+        return str(wrapper.get("result", ""))
+
+
 def get_backend(
     backend_type: str = "ollama",
     model: str | None = None,
@@ -237,7 +300,8 @@ def get_backend(
     """Factory to get LLM backend.
 
     Args:
-        backend_type: "ollama" (default, local), "openai" or "anthropic" (API)
+        backend_type: "ollama" (default, local), "openai" or "anthropic" (API),
+            "claude-cli" (local claude binary, subscription auth)
         model: Model name (uses sensible defaults if None)
         api_key: API key for cloud backends
         effort: Effort level for the anthropic backend (ignored by others)
@@ -256,7 +320,10 @@ def get_backend(
         return OpenAIBackend(model or "gpt-5.6-sol", api_key)
     elif backend_type == "anthropic":
         return AnthropicBackend(model or "claude-opus-5", api_key, effort=effort)
+    elif backend_type == "claude-cli":
+        return ClaudeCliBackend(model or "claude-opus-5")
     else:
         raise ValueError(
-            f"Unknown backend: {backend_type}. Choose from: ollama, openai, anthropic"
+            f"Unknown backend: {backend_type}. "
+            "Choose from: ollama, openai, anthropic, claude-cli"
         )

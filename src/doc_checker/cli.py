@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import shutil
 import sys
 from pathlib import Path
 
@@ -37,15 +38,16 @@ def main() -> int:
     )
     parser.add_argument(
         "--llm-backend",
-        choices=["ollama", "openai", "anthropic"],
+        choices=["ollama", "openai", "anthropic", "claude-cli"],
         default="ollama",
-        help="LLM backend to use (default: ollama)",
+        help="LLM backend to use (default: ollama; claude-cli uses the local "
+        "claude binary with subscription auth, no API key)",
     )
     parser.add_argument(
         "--llm-model",
         type=str,
         help="LLM model name (defaults: qwen3:1.7b for ollama, gpt-5.6-sol for "
-        "openai, claude-opus-5 for anthropic)",
+        "openai, claude-opus-5 for anthropic/claude-cli)",
     )
     parser.add_argument(
         "--llm-effort",
@@ -135,6 +137,14 @@ def main() -> int:
             print(f"Error: {env_var} environment variable not set", file=sys.stderr)
             print(f"Set with: export {env_var}='{key_hint}'", file=sys.stderr)
             return 1
+    if (
+        args.check_quality
+        and args.llm_backend == "claude-cli"
+        and shutil.which("claude") is None
+    ):
+        print("Error: claude CLI not found on PATH", file=sys.stderr)
+        print("Install Claude Code and run: claude login", file=sys.stderr)
+        return 1
 
     # Run checks
     if args.check_all or args.check_basic or args.check_quality:

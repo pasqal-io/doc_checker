@@ -32,6 +32,7 @@ pip install -e ".[llm]"           # LLM quality checks (ollama)
 pip install -e ".[llm-openai]"    # LLM quality checks (openai)
 pip install -e ".[llm-anthropic]" # LLM quality checks (anthropic/claude)
 pip install -e ".[llm-all]"       # LLM quality checks (ollama + openai + anthropic)
+# claude-cli backend needs no extra — just the claude binary on PATH (claude login)
 pip install -e ".[dev]"           # all dev dependencies
 ```
 
@@ -51,11 +52,12 @@ doc-checker --modules my_package --check-basic --root /path/to/project
 doc-checker --modules my_package --check-external-links --root /path/to/project
 
 # LLM quality checks (defaults: ollama/qwen3:1.7b, openai/gpt-5.6-sol,
-# anthropic/claude-opus-5)
+# anthropic/claude-opus-5, claude-cli/claude-opus-5)
 doc-checker --modules my_package --check-quality --root /path/to/project
 doc-checker --modules my_package --check-quality --llm-backend openai --root .
 doc-checker --modules my_package --check-quality --llm-backend anthropic --root .
 doc-checker --modules my_package --check-quality --llm-backend anthropic --llm-effort low --root .
+doc-checker --modules my_package --check-quality --llm-backend claude-cli --root .
 doc-checker --modules my_package --check-quality --llm-model gpt-5.6-sol --root .
 doc-checker --modules my_package --check-quality --quality-sample 0.1 --root .
 
@@ -96,6 +98,14 @@ doc-checker --modules my_package --check-basic -v --root /path/to/project
 > not sent; Claude Opus 5 rejects them. Thinking counts against the response
 > token budget, so if an API is reported as `LLM stopped early:
 > stop_reason=max_tokens`, re-run with `--llm-effort low`.
+
+> **Claude CLI backend (dev/validation).** The `claude-cli` backend shells out
+> to a local headless `claude -p` (Claude Code CLI) per API checked. Auth comes
+> from your `claude login` subscription session — no `ANTHROPIC_API_KEY`, no
+> pip extra, just the `claude` binary on PATH. Trade-offs vs `anthropic`: no
+> structured outputs (JSON validity is best-effort), serial subprocess calls
+> (slow), and it consumes your subscription quota. Use it to validate the
+> quality pipeline locally; use `anthropic` for CI/production.
 
 ### Quality severity
 
@@ -156,7 +166,7 @@ CLI -> DriftDetector -> checkers_folder/ -> DriftReport -> formatters
                             ├── utils/parsers.py      (MarkdownParser, YamlParser)
                             ├── utils/code_analyzer.py (CodeAnalyzer)
                             ├── utils/link_checker.py  (async HTTP)
-                            ├── llm_backends.py        (OllamaBackend, OpenAIBackend)
+                            ├── llm_backends.py        (Ollama/OpenAI/Anthropic/ClaudeCli backends)
                             └── prompts.py             (LLM prompt templates)
 ```
 
@@ -166,7 +176,7 @@ CLI -> DriftDetector -> checkers_folder/ -> DriftReport -> formatters
 - `utils/parsers.py` - MarkdownParser (single-pass scan, cached) / YamlParser
 - `utils/code_analyzer.py` - Introspect Python modules via importlib/inspect (cached)
 - `utils/link_checker.py` - Async HTTP validation (aiohttp or urllib fallback)
-- `llm_backends.py` - OllamaBackend / OpenAIBackend abstraction
+- `llm_backends.py` - OllamaBackend / OpenAIBackend / AnthropicBackend / ClaudeCliBackend abstraction
 - `prompts.py` - LLM prompt templates
 - `models.py` - Dataclasses (SignatureInfo, DocReference, DriftReport, etc.)
 - `formatters.py` - Report rendering (text/JSON)

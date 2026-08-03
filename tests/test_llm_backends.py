@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import json
+import subprocess
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 from doc_checker.llm_backends import (
     AnthropicBackend,
+    ClaudeCliBackend,
     LLMBackend,
     OllamaBackend,
     OpenAIBackend,
@@ -336,3 +339,90 @@ def test_get_backend_unknown():
     """Test get_backend raises error for unknown backend."""
     with pytest.raises(ValueError, match="ollama, openai, anthropic"):
         get_backend(backend_type="invalid")
+
+
+def _cli_result(stdout: str = "", returncode: int = 0, stderr: str = ""):
+    """Fake subprocess.CompletedProcess for claude -p."""
+    return MagicMock(stdout=stdout, returncode=returncode, stderr=stderr)
+
+
+def test_claude_cli_backend_missing_binary():
+    """Test ClaudeCliBackend raises RuntimeError when claude not on PATH."""
+    with patch("doc_checker.llm_backends.shutil.which", return_value=None):
+        with pytest.raises(RuntimeError, match="claude CLI not found"):
+            ClaudeCliBackend()
+
+
+def test_claude_cli_backend_generate():
+    """Test generate extracts result from the CLI JSON wrapper."""
+    wrapper = json.dumps({"result": '{"issues": []}', "is_error": False})
+    with (
+        patch("doc_checker.llm_backends.shutil.which", return_value="/usr/bin/claude"),
+        patch(
+            "doc_checker.llm_backends.subprocess.run",
+            return_value=_cli_result(stdout=wrapper),
+        ) as mock_run,
+    ):
+        backend = ClaudeCliBackend(model="claude-opus-5")
+        assert backend.generate("prompt") == '{"issues": []}'
+        cmd = mock_run.call_args[0][0]
+        assert cmd[:3] == ["claude", "-p", "--output-format"]
+        assert "claude-opus-5" in cmd
+        assert mock_run.call_args.kwargs["input"] == "prompt"
+
+
+def test_claude_cli_backend_generate_failure_returns_error_json():
+    """Test nonzero exit surfaces via the error-JSON contract."""
+    with (
+        patch("doc_checker.llm_backends.shutil.which", return_value="/usr/bin/claude"),
+        patch(
+            "doc_checker.llm_backends.subprocess.run",
+            return_value=_cli_result(returncode=1, stderr="not logged in"),
+        ),
+    ):
+        backend = ClaudeCliBackend()
+        result = json.loads(backend.generate("prompt"))
+        assert "not logged in" in result["error"]
+        assert result["issues"] == []
+
+
+def test_claude_cli_backend_generate_timeout():
+    """Test timeout surfaces via the error-JSON contract."""
+    with (
+        patch("doc_checker.llm_backends.shutil.which", return_value="/usr/bin/claude"),
+        patch(
+            "doc_checker.llm_backends.subprocess.run",
+            side_effect=subprocess.TimeoutExpired(cmd="claude", timeout=600),
+        ),
+    ):
+        backend = ClaudeCliBackend()
+        result = json.loads(backend.generate("prompt"))
+        assert "timed out" in result["error"]
+        assert result["issues"] == []
+
+
+def test_claude_cli_backend_is_error_wrapper():
+    """Test is_error in the CLI wrapper surfaces via the error-JSON contract."""
+    wrapper = json.dumps({"result": "usage limit reached", "is_error": True})
+    with (
+        patch("doc_checker.llm_backends.shutil.which", return_value="/usr/bin/claude"),
+        patch(
+            "doc_checker.llm_backends.subprocess.run",
+            return_value=_cli_result(stdout=wrapper),
+        ),
+    ):
+        backend = ClaudeCliBackend()
+        result = json.loads(backend.generate("prompt"))
+        assert "usage limit reached" in result["error"]
+
+
+@patch("doc_checker.llm_backends.ClaudeCliBackend")
+def test_get_backend_claude_cli(mock_cli_class):
+    """Test get_backend returns ClaudeCliBackend with default model."""
+    mock_backend = MagicMock()
+    mock_cli_class.return_value = mock_backend
+
+    backend = get_backend(backend_type="claude-cli")
+
+    assert backend == mock_backend
+    mock_cli_class.assert_called_once_with("claude-opus-5")
