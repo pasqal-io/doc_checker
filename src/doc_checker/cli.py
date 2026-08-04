@@ -5,11 +5,13 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import shutil
 import sys
 from pathlib import Path
 
 from .checkers import DriftDetector
 from .formatters import format_report
+from .llm_backends import VALID_EFFORTS
 
 
 def main() -> int:
@@ -37,14 +39,23 @@ def main() -> int:
     )
     parser.add_argument(
         "--llm-backend",
-        choices=["ollama", "openai"],
+        choices=["ollama", "openai", "anthropic", "claude-cli"],
         default="ollama",
-        help="LLM backend to use (default: ollama)",
+        help="LLM backend to use (default: ollama; claude-cli uses the local "
+        "claude binary with subscription auth, no API key)",
     )
     parser.add_argument(
         "--llm-model",
         type=str,
-        help="LLM model name (defaults: qwen3:1.7b for ollama, gpt-5.6-sol for openai)",
+        help="LLM model name (defaults: qwen3:1.7b for ollama, gpt-5.6-sol for "
+        "openai, claude-opus-5 for anthropic/claude-cli)",
+    )
+    parser.add_argument(
+        "--llm-effort",
+        choices=sorted(VALID_EFFORTS),
+        default="medium",
+        help="Effort level for the anthropic backend (default: medium; "
+        "lower is faster/cheaper, ignored by other backends)",
     )
     parser.add_argument(
         "--quality-sample",
@@ -114,14 +125,27 @@ def main() -> int:
         ignore_submodules=args.ignore_submodules,
     )
 
-    # Get API key for OpenAI if needed
+    # Get API key for cloud backends if needed
+    key_envs = {
+        "openai": ("OPENAI_API_KEY", "sk-proj-..."),
+        "anthropic": ("ANTHROPIC_API_KEY", "sk-ant-api03-..."),
+    }
     api_key = None
-    if args.check_quality and args.llm_backend == "openai":
-        api_key = os.getenv("OPENAI_API_KEY")
+    if args.check_quality and args.llm_backend in key_envs:
+        env_var, key_hint = key_envs[args.llm_backend]
+        api_key = os.getenv(env_var)
         if not api_key:
-            print("Error: OPENAI_API_KEY environment variable not set", file=sys.stderr)
-            print("Set with: export OPENAI_API_KEY='sk-proj-...'", file=sys.stderr)
+            print(f"Error: {env_var} environment variable not set", file=sys.stderr)
+            print(f"Set with: export {env_var}='{key_hint}'", file=sys.stderr)
             return 1
+    if (
+        args.check_quality
+        and args.llm_backend == "claude-cli"
+        and shutil.which("claude") is None
+    ):
+        print("Error: claude CLI not found on PATH", file=sys.stderr)
+        print("Install Claude Code and run: claude login", file=sys.stderr)
+        return 1
 
     # Run checks
     if args.check_all or args.check_basic or args.check_quality:
@@ -139,6 +163,7 @@ def main() -> int:
             quality_api_key=api_key,
             quality_sample_rate=args.quality_sample,
             quality_min_severity=args.quality_min_severity,
+            quality_effort=args.llm_effort,
             verbose=args.verbose,
         )
 
