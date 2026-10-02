@@ -25,7 +25,7 @@ class LinkChecker:
         "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
     )
 
-    def __init__(self, timeout: float = 10.0, max_concurrent: int = 5):
+    def __init__(self, timeout: float = 30.0, max_concurrent: int = 5):
         self.timeout = timeout
         self.max_concurrent = max_concurrent
 
