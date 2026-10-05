@@ -529,9 +529,23 @@ class TestQualityPreflight:
             str(integration_project),
         ]
 
-    def test_anthropic_missing_key_exits_one(self, integration_project: Path):
-        """Explicit --check-quality + anthropic without key exits 1, no network."""
-        argv = self._argv(integration_project, "anthropic")
-        env = {k: v for k, v in os.environ.items() if k != "ANTHROPIC_API_KEY"}
+    @pytest.mark.parametrize(
+        ("backend", "env_var"),
+        [("anthropic", "ANTHROPIC_API_KEY"), ("openai", "OPENAI_API_KEY")],
+    )
+    def test_missing_key_exits_one_before_any_check(
+        self, integration_project: Path, capsys, backend: str, env_var: str
+    ):
+        """Explicit --check-quality without the key exits 1 naming the env var.
+
+        The fixture already has basic drift, so exit code alone is not proof the
+        pre-flight fired: also require the stderr hint and that no basic-check
+        output was printed (the pre-flight runs before any checker).
+        """
+        argv = self._argv(integration_project, backend)
+        env = {k: v for k, v in os.environ.items() if k != env_var}
         with patch("sys.argv", argv), patch.dict("os.environ", env, clear=True):
             assert main() == 1
+        captured = capsys.readouterr()
+        assert env_var in captured.err
+        assert "DOCUMENTATION DRIFT REPORT" not in captured.out

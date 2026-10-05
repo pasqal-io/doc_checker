@@ -4,7 +4,7 @@ import math
 import random
 from pathlib import Path
 
-from doc_checker.constants import SEVERITY_RANK
+from doc_checker.constants import SEVERITY_RANK, VALID_EFFORTS
 from doc_checker.llm_backends import get_backend
 from doc_checker.models import DriftReport, QualityIssue, SignatureInfo
 from doc_checker.prompts import get_combined_quality_prompt
@@ -65,6 +65,10 @@ class LLMQualityChecker(Checker):
         self.backend_type = backend_type
         self.model = model
         self.api_key = api_key
+        if effort not in VALID_EFFORTS:
+            raise ValueError(
+                f"Invalid effort {effort!r}; choose from {sorted(VALID_EFFORTS)}"
+            )
         self.effort = effort
         self.sample_rate = sample_rate
         if min_severity not in SEVERITY_RANK:

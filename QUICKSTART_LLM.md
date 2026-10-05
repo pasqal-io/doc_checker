@@ -3,7 +3,8 @@
 LLM quality checks read each public API's **signature + docstring + a short
 source excerpt** and flag docstring problems: code/docstring contradictions,
 mismatched or undocumented parameters, missing docstrings, and clarity/style
-issues. Two backends are supported: **ollama** (local, default) and **openai**.
+issues. Three backends are supported: **ollama** (local, default), **openai**
+and **anthropic**.
 
 ## Local backend (ollama)
 
@@ -34,7 +35,8 @@ noticeably better results if you have the VRAM — e.g. `qwen2.5-coder:14b`
 ```bash
 cd /path/to/doc_checker
 pip install -e ".[llm]"        # ollama backend
-# or ".[llm-openai]" for openai, ".[llm-all]" for both
+# or ".[llm-openai]" / ".[llm-anthropic]" for the cloud backends,
+# ".[llm-all]" for all three
 ```
 
 ### 4. Run quality checks
@@ -129,19 +131,39 @@ see `⚠ WARNING` and `ℹ SUGGESTION` entries.
 
 ## Cloud backend (openai)
 
-The `openai` backend targets **gpt-5.x reasoning models** (default
-`gpt-5.6-sol`) via the Responses API. Older non-reasoning chat models
+The `openai` backend targets **gpt-5.x/6.x reasoning models** (default
+`gpt-6.1-sol`) via the Responses API. Older non-reasoning chat models
 (e.g. `gpt-4o`) are **not supported**.
 
 ```bash
 # Set API key (never hard-code it)
 export OPENAI_API_KEY='sk-proj-...'
 
-# Run with OpenAI (default gpt-5.6-sol)
+# Run with OpenAI (default gpt-6.1-sol)
 doc-checker --modules my_package --check-quality --llm-backend openai --root .
 
-# Pick a specific gpt-5.x model
-doc-checker --modules my_package --check-quality --llm-backend openai --llm-model gpt-5.6-sol --root .
+# Pick a specific reasoning model
+doc-checker --modules my_package --check-quality --llm-backend openai --llm-model gpt-6.1-sol --root .
+```
+
+## Cloud backend (anthropic)
+
+The `anthropic` backend (default `claude-opus-5-5`) uses structured outputs, so
+responses are API-guaranteed valid JSON. Claude Opus 5.5 always thinks;
+`--llm-effort {low,medium,high,xhigh,max}` (default `medium`) is the speed/cost
+lever. Thinking counts against the response token budget, so if an API is
+reported as `LLM stopped early: stop_reason=max_tokens`, re-run with
+`--llm-effort low`.
+
+```bash
+# Set API key (never hard-code it)
+export ANTHROPIC_API_KEY='sk-ant-api03-...'
+
+# Run with Anthropic (default claude-opus-5-5, effort medium)
+doc-checker --modules my_package --check-quality --llm-backend anthropic --root .
+
+# Faster / cheaper
+doc-checker --modules my_package --check-quality --llm-backend anthropic --llm-effort low --root .
 ```
 
 ## Troubleshooting
@@ -161,8 +183,8 @@ ollama pull qwen3:1.7b   # Install the default model
 ### Empty / unparseable LLM response
 Reported as a `critical` `error` issue ("Model returned malformed or empty
 output; re-run"). Usually a reasoning model that ran out of output tokens — on
-ollama, try a larger or non-thinking model; on openai (gpt-5.x only, no
-non-thinking option), just re-run.
+ollama, try a larger or non-thinking model; on openai (reasoning models only,
+no non-thinking option), just re-run; on anthropic, lower `--llm-effort`.
 
 ### Out of memory
 ```bash
@@ -182,8 +204,9 @@ pkill ollama && ollama serve
 ## Security note
 
 - Ollama runs **locally** — no data leaves your machine.
-- The openai backend sends signatures, docstrings, and source excerpts to the
-  OpenAI API — set `OPENAI_API_KEY` via env var, never in code.
+- The openai and anthropic backends send signatures, docstrings, and source
+  excerpts to the provider API — set `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` via
+  env var, never in code.
 
 ## Next steps
 

@@ -514,3 +514,9 @@ def test_llm_quality_checker_rejects_invalid_min_severity(tmp_path):
     """An invalid min_severity fails fast with a clear error, not a later KeyError."""
     with pytest.raises(ValueError, match="Invalid min_severity"):
         LLMQualityChecker(tmp_path, ["m"], set(), min_severity="warn")
+
+
+def test_llm_quality_checker_rejects_invalid_effort(tmp_path):
+    """An invalid effort fails fast here, not as a swallowed backend warning."""
+    with pytest.raises(ValueError, match="Invalid effort"):
+        LLMQualityChecker(tmp_path, ["m"], set(), effort="turbo")

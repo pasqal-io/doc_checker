@@ -7,6 +7,8 @@ import os
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, Any, cast
 
+from doc_checker.constants import DEFAULT_MODELS, VALID_EFFORTS
+
 if TYPE_CHECKING:
     from anthropic.types import OutputConfigParam
 
@@ -24,6 +26,14 @@ class LLMBackend(ABC):
     def generate_json(self, prompt: str) -> dict[str, Any]:
         """Generate and parse JSON response."""
         response: str = self.generate(prompt)
+        # Clean JSON (structured outputs, or a well-behaved model) parses as-is.
+        # Only fall back to the fence/<think> heuristics when it does not, so a
+        # ``` inside a JSON string value is never mistaken for a fence.
+        try:
+            result: dict[str, Any] = json.loads(response)
+            return result
+        except json.JSONDecodeError:
+            pass
         # Strip reasoning-model <think>...</think> blocks (qwen3, etc.)
         if "<think>" in response:
             end = response.rfind("</think>")
@@ -40,7 +50,7 @@ class LLMBackend(ABC):
             response = response[start:end].strip()
 
         try:
-            result: dict[str, Any] = json.loads(response)
+            result = json.loads(response)
             return result
         except json.JSONDecodeError as e:
             # Fallback: return error structure
@@ -54,7 +64,7 @@ class LLMBackend(ABC):
 class OllamaBackend(LLMBackend):
     """Ollama local LLM backend (default)."""
 
-    def __init__(self, model: str = "qwen3:1.7b"):
+    def __init__(self, model: str = DEFAULT_MODELS["ollama"]):
         """Initialize Ollama backend.
 
         Args:
@@ -99,7 +109,7 @@ class OllamaBackend(LLMBackend):
 class OpenAIBackend(LLMBackend):
     """OpenAI API backend."""
 
-    def __init__(self, model: str = "gpt-6.1-sol", api_key: str | None = None):
+    def __init__(self, model: str = DEFAULT_MODELS["openai"], api_key: str | None = None):
         """Initialize OpenAI backend.
 
         Args:
@@ -143,15 +153,12 @@ class OpenAIBackend(LLMBackend):
         return response.output_text or ""
 
 
-VALID_EFFORTS = {"low", "medium", "high", "xhigh", "max"}
-
-
 class AnthropicBackend(LLMBackend):
     """Anthropic (Claude) API backend with structured outputs."""
 
     def __init__(
         self,
-        model: str = "claude-opus-5-5",
+        model: str = DEFAULT_MODELS["anthropic"],
         api_key: str | None = None,
         effort: str = "medium",
     ):
@@ -215,10 +222,11 @@ class AnthropicBackend(LLMBackend):
             ),
             messages=[{"role": "user", "content": prompt}],
         )
-        # Refusal (safety classifiers) or truncation: surface through the
-        # error-JSON contract so the quality checker reports a critical issue
-        # instead of a falsely clean API.
-        if response.stop_reason in ("refusal", "max_tokens"):
+        # Anything but a clean end_turn (refusal, max_tokens,
+        # model_context_window_exceeded, ...) means truncated or absent text:
+        # surface through the error-JSON contract so the quality checker reports
+        # a critical issue instead of a falsely clean API or a vague parse error.
+        if response.stop_reason != "end_turn":
             return json.dumps(
                 {
                     "error": f"LLM stopped early: stop_reason={response.stop_reason}",
@@ -251,11 +259,13 @@ def get_backend(
         RuntimeError: If backend not available
     """
     if backend_type == "ollama":
-        return OllamaBackend(model or "qwen3:1.7b")
+        return OllamaBackend(model or DEFAULT_MODELS["ollama"])
     elif backend_type == "openai":
-        return OpenAIBackend(model or "gpt-6.1-sol", api_key)
+        return OpenAIBackend(model or DEFAULT_MODELS["openai"], api_key)
     elif backend_type == "anthropic":
-        return AnthropicBackend(model or "claude-opus-5-5", api_key, effort=effort)
+        return AnthropicBackend(
+            model or DEFAULT_MODELS["anthropic"], api_key, effort=effort
+        )
     else:
         raise ValueError(
             f"Unknown backend: {backend_type}. " "Choose from: ollama, openai, anthropic"

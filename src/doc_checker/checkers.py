@@ -18,6 +18,7 @@ from doc_checker.checkers_folder.local_links import LocalLinksChecker
 from doc_checker.checkers_folder.nav_paths import NavPathsChecker
 from doc_checker.checkers_folder.quality import LLMQualityChecker
 from doc_checker.checkers_folder.references import ReferencesChecker
+from doc_checker.constants import DEFAULT_MODELS
 from doc_checker.utils.code_analyzer import CodeAnalyzer
 from doc_checker.utils.link_checker import LinkChecker
 from doc_checker.utils.parsers import MarkdownParser, YamlParser
@@ -96,11 +97,7 @@ class DriftDetector:
         report = DriftReport()
         if check_quality:
             report.llm_backend = quality_backend
-            report.llm_model = quality_model or {
-                "ollama": "qwen3:1.7b",
-                "openai": "gpt-6.1-sol",
-                "anthropic": "claude-opus-5-5",
-            }.get(quality_backend)
+            report.llm_model = quality_model or DEFAULT_MODELS.get(quality_backend)
         self._warn_unmatched_ignores(report)
         checkers: list[Checker] = []
         if not skip_basic_checks:

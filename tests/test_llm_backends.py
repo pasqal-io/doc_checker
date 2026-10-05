@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -22,6 +23,47 @@ def _anthropic_response(text: str = '{"issues": []}', stop_reason: str = "end_tu
     block.type = "text"
     block.text = text
     return MagicMock(content=[block], stop_reason=stop_reason)
+
+
+class _StaticBackend(LLMBackend):
+    """Backend returning a canned string; exercises generate_json parsing."""
+
+    model = "static"
+
+    def __init__(self, response: str):
+        self._response = response
+
+    def generate(self, prompt: str) -> str:
+        return self._response
+
+
+def test_generate_json_keeps_fence_inside_string_value():
+    """A ``` inside a JSON string must not be mistaken for a markdown fence."""
+    payload = {
+        "issues": [
+            {
+                "severity": "critical",
+                "category": "params",
+                "message": "wrong default",
+                "suggestion": "Use ```python\ndef f(x: int = 0)\n``` instead",
+                "line_reference": None,
+            }
+        ]
+    }
+    parsed = _StaticBackend(json.dumps(payload)).generate_json("prompt")
+    assert parsed == payload
+
+
+def test_generate_json_strips_fenced_block():
+    """A fenced non-JSON wrapper still parses via the fallback heuristics."""
+    parsed = _StaticBackend('Here:\n```json\n{"issues": []}\n```').generate_json("p")
+    assert parsed == {"issues": []}
+
+
+def test_generate_json_strips_think_block():
+    """A <think>...</think> prefix is stripped before parsing."""
+    parsed = _StaticBackend('<think>hmm</think>{"issues": []}').generate_json("p")
+    assert parsed == {"issues": []}
 
 
 def test_llm_backend_abstract():
@@ -249,6 +291,22 @@ def test_anthropic_backend_generate_truncated():
 
         assert parsed["issues"] == []
         assert "max_tokens" in parsed["error"]
+
+
+def test_anthropic_backend_generate_context_window_exceeded():
+    """Any non-end_turn stop_reason maps to the error-JSON contract."""
+    with patch("anthropic.Anthropic") as mock_anthropic_class:
+        mock_client = MagicMock()
+        mock_client.messages.create.return_value = _anthropic_response(
+            text='{"issues": [{"sev', stop_reason="model_context_window_exceeded"
+        )
+        mock_anthropic_class.return_value = mock_client
+
+        backend = AnthropicBackend(api_key="test-key")
+        parsed = backend.generate_json("prompt")
+
+        assert parsed["issues"] == []
+        assert "model_context_window_exceeded" in parsed["error"]
 
 
 @patch("doc_checker.llm_backends.OllamaBackend")

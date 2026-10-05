@@ -9,8 +9,8 @@ import sys
 from pathlib import Path
 
 from .checkers import DriftDetector
+from .constants import DEFAULT_MODELS, VALID_EFFORTS
 from .formatters import format_report
-from .llm_backends import VALID_EFFORTS
 
 
 def main() -> int:
@@ -45,8 +45,9 @@ def main() -> int:
     parser.add_argument(
         "--llm-model",
         type=str,
-        help="LLM model name (defaults: qwen3:1.7b for ollama, gpt-6.1-sol for "
-        "openai, claude-opus-5-5 for anthropic)",
+        help="LLM model name (defaults: "
+        + ", ".join(f"{m} for {b}" for b, m in DEFAULT_MODELS.items())
+        + ")",
     )
     parser.add_argument(
         "--llm-effort",
