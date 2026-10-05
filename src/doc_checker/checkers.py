@@ -78,8 +78,7 @@ class DriftDetector:
         Args:
             check_external_links: Validate HTTP/HTTPS links via async requests.
             check_quality: Run LLM quality analysis on docstrings.
-            quality_backend: LLM backend ("ollama", "openai", "anthropic"
-                or "claude-cli").
+            quality_backend: LLM backend ("ollama", "openai" or "anthropic").
             quality_model: Model name override (defaults per backend).
             quality_api_key: API key for cloud backends.
             quality_sample_rate: Fraction of APIs to check (0.0-1.0).
@@ -101,7 +100,6 @@ class DriftDetector:
                 "ollama": "qwen3:1.7b",
                 "openai": "gpt-5.6-sol",
                 "anthropic": "claude-opus-5",
-                "claude-cli": "claude-opus-5",
             }.get(quality_backend)
         self._warn_unmatched_ignores(report)
         checkers: list[Checker] = []

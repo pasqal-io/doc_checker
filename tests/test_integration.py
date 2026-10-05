@@ -535,12 +535,3 @@ class TestQualityPreflight:
         env = {k: v for k, v in os.environ.items() if k != "ANTHROPIC_API_KEY"}
         with patch("sys.argv", argv), patch.dict("os.environ", env, clear=True):
             assert main() == 1
-
-    def test_claude_cli_missing_binary_exits_one(self, integration_project: Path):
-        """Explicit --check-quality + claude-cli without binary exits 1."""
-        argv = self._argv(integration_project, "claude-cli")
-        with (
-            patch("sys.argv", argv),
-            patch("doc_checker.cli.shutil.which", return_value=None),
-        ):
-            assert main() == 1
