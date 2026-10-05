@@ -564,12 +564,14 @@ class TestArgValidation:
 
 
 class TestQualityPreflight:
-    """Test CLI pre-flight exits for explicit --check-quality."""
+    """A missing cloud API key exits 1 before any check, explicit or implicit."""
 
-    def _argv(self, integration_project: Path, backend: str) -> list[str]:
+    def _argv(
+        self, integration_project: Path, backend: str, check_flag: str | None
+    ) -> list[str]:
         return [
             "doc-checker",
-            "--check-quality",
+            *([check_flag] if check_flag else []),
             "--llm-backend",
             backend,
             "--modules",
@@ -578,20 +580,27 @@ class TestQualityPreflight:
             str(integration_project),
         ]
 
+    @pytest.mark.parametrize("check_flag", ["--check-quality", "--check-all", None])
     @pytest.mark.parametrize(
         ("backend", "env_var"),
         [("anthropic", "ANTHROPIC_API_KEY"), ("openai", "OPENAI_API_KEY")],
     )
     def test_missing_key_exits_one_before_any_check(
-        self, integration_project: Path, capsys, backend: str, env_var: str
+        self,
+        integration_project: Path,
+        capsys,
+        backend: str,
+        env_var: str,
+        check_flag: str | None,
     ):
-        """Explicit --check-quality without the key exits 1 naming the env var.
+        """Quality enabled without the key exits 1 naming the env var.
 
-        The fixture already has basic drift, so exit code alone is not proof the
-        pre-flight fired: also require the stderr hint and that no basic-check
-        output was printed (the pre-flight runs before any checker).
+        Covers explicit --check-quality, --check-all and the implicit run-all path
+        (no check flags). The fixture already has basic drift, so exit code alone
+        is not proof: also require the stderr hint and that no report was printed
+        (the backend is built before any checker runs).
         """
-        argv = self._argv(integration_project, backend)
+        argv = self._argv(integration_project, backend, check_flag)
         env = {k: v for k, v in os.environ.items() if k != env_var}
         with patch("sys.argv", argv), patch.dict("os.environ", env, clear=True):
             assert main() == 1

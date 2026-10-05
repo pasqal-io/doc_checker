@@ -30,8 +30,6 @@ pip install -e .
 pip install -e ".[async]"         # async link checking (recommended)
 pip install -e ".[llm]"           # LLM quality checks (ollama)
 pip install -e ".[llm-openai]"    # LLM quality checks (openai)
-pip install -e ".[llm-anthropic]" # LLM quality checks (anthropic/claude)
-pip install -e ".[llm-all]"       # LLM quality checks (ollama + openai + anthropic)
 pip install -e ".[dev]"           # all dev dependencies
 ```
 

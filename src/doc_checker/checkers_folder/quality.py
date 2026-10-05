@@ -78,11 +78,13 @@ class LLMQualityChecker(Checker):
             )
         self.min_severity = min_severity
         self.verbose = verbose
-
-    def check(self, report: DriftReport) -> None:
-        """Run LLM quality checks; skip with warning if deps missing."""
+        # Build the backend now so config errors (missing API key, unknown backend)
+        # raise ValueError before any checker runs. Only a missing package or an
+        # unreachable local service is a soft skip.
+        self._checker: QualityChecker | None = None
+        self._skip_reason: str | None = None
         try:
-            checker = QualityChecker(
+            self._checker = QualityChecker(
                 self.root_path,
                 self.backend_type,
                 self.model,
@@ -90,9 +92,15 @@ class LLMQualityChecker(Checker):
                 ignore_submodules=self.ignore_submodules,
                 effort=self.effort,
             )
-        except (ImportError, RuntimeError, ValueError) as e:
-            report.warnings.append(f"Quality checks skipped: {e}")
+        except (ImportError, RuntimeError) as e:
+            self._skip_reason = str(e)
+
+    def check(self, report: DriftReport) -> None:
+        """Run LLM quality checks; skip with warning if deps missing."""
+        if self._checker is None:
+            report.warnings.append(f"Quality checks skipped: {self._skip_reason}")
             return
+        checker = self._checker
         if self.verbose:
             print(f"LLM quality checks ({self.backend_type}, {checker.backend.model})...")
         threshold = SEVERITY_RANK[self.min_severity]
@@ -255,7 +263,7 @@ class QualityChecker:
         Args:
             module_name: Module to check (e.g., "emu_mps")
             verbose: Print progress
-            sample_rate: Check only this fraction of APIs (0.0-1.0)
+            sample_rate: Check only this fraction of APIs, in (0.0, 1.0]
 
         Returns:
             List of all quality issues found

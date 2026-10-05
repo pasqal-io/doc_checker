@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import sys
 from pathlib import Path
 
@@ -59,7 +58,7 @@ def main() -> int:
         "--quality-sample",
         type=float,
         default=1.0,
-        help="Sample rate for quality checks (0.0-1.0, default: 1.0 = all APIs)",
+        help="Fraction of APIs to quality-check, in (0, 1] (default: 1.0 = all)",
     )
     parser.add_argument(
         "--quality-min-severity",
@@ -137,20 +136,6 @@ def main() -> int:
         ignore_submodules=args.ignore_submodules,
     )
 
-    # Get API key for cloud backends if needed
-    key_envs = {
-        "openai": ("OPENAI_API_KEY", "sk-proj-..."),
-        "anthropic": ("ANTHROPIC_API_KEY", "sk-ant-api03-..."),
-    }
-    api_key = None
-    if args.check_quality and args.llm_backend in key_envs:
-        env_var, key_hint = key_envs[args.llm_backend]
-        api_key = os.getenv(env_var)
-        if not api_key:
-            print(f"Error: {env_var} environment variable not set", file=sys.stderr)
-            print(f"Set with: export {env_var}='{key_hint}'", file=sys.stderr)
-            return 1
-
     # Run checks
     if args.check_all or args.check_basic or args.check_quality:
         if not args.json:
@@ -159,17 +144,21 @@ def main() -> int:
         include_external = args.check_all or args.check_external_links
         include_quality = args.check_all or args.check_quality
 
-        report = detector.check_all(
-            check_external_links=include_external,
-            check_quality=include_quality,
-            quality_backend=args.llm_backend,
-            quality_model=args.llm_model,
-            quality_api_key=api_key,
-            quality_sample_rate=args.quality_sample,
-            quality_min_severity=args.quality_min_severity,
-            quality_effort=args.llm_effort,
-            verbose=args.verbose,
-        )
+        try:
+            report = detector.check_all(
+                check_external_links=include_external,
+                check_quality=include_quality,
+                quality_backend=args.llm_backend,
+                quality_model=args.llm_model,
+                quality_sample_rate=args.quality_sample,
+                quality_min_severity=args.quality_min_severity,
+                quality_effort=args.llm_effort,
+                verbose=args.verbose,
+            )
+        except ValueError as e:
+            # Backend config error (e.g. missing API key); raised before any check
+            print(f"Error: {e}", file=sys.stderr)
+            return 1
 
         if args.json:
             print(json.dumps(report.to_dict(), indent=2))

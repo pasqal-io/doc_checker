@@ -23,6 +23,18 @@ class LLMBackend(ABC):
         """Generate completion from prompt."""
         pass
 
+    @staticmethod
+    def _parse_json_object(text: str) -> dict[str, Any]:
+        """json.loads that only accepts an object and tolerates raw control chars.
+
+        strict=False: local models often emit literal newlines/tabs inside string
+        values, which strict JSON rejects ("Invalid control character").
+        """
+        result = json.loads(text, strict=False)
+        if not isinstance(result, dict):
+            raise TypeError(f"expected a JSON object, got {type(result).__name__}")
+        return result
+
     def generate_json(self, prompt: str) -> dict[str, Any]:
         """Generate and parse JSON response."""
         response: str = self.generate(prompt)
@@ -30,9 +42,8 @@ class LLMBackend(ABC):
         # Only fall back to the fence/<think> heuristics when it does not, so a
         # ``` inside a JSON string value is never mistaken for a fence.
         try:
-            result: dict[str, Any] = json.loads(response)
-            return result
-        except json.JSONDecodeError:
+            return self._parse_json_object(response)
+        except (json.JSONDecodeError, TypeError):
             pass
         # Strip reasoning-model <think>...</think> blocks (qwen3, etc.)
         if "<think>" in response:
@@ -50,9 +61,8 @@ class LLMBackend(ABC):
             response = response[start:end].strip()
 
         try:
-            result = json.loads(response)
-            return result
-        except json.JSONDecodeError as e:
+            return self._parse_json_object(response)
+        except (json.JSONDecodeError, TypeError) as e:
             # Fallback: return error structure
             return {
                 "error": f"Failed to parse JSON: {e}",
@@ -172,16 +182,9 @@ class AnthropicBackend(LLMBackend):
                 caps thinking depth.
 
         Raises:
-            ImportError: If anthropic package not installed
             ValueError: If API key not provided or effort invalid
         """
-        try:
-            from anthropic import Anthropic
-        except ImportError:
-            raise ImportError(
-                "anthropic package required. "
-                "Install with: pip install 'doc-checker[llm-anthropic]'"
-            )
+        from anthropic import Anthropic
 
         if effort not in VALID_EFFORTS:
             raise ValueError(

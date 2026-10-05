@@ -37,6 +37,22 @@ class _StaticBackend(LLMBackend):
         return self._response
 
 
+def test_generate_json_tolerates_raw_control_chars_in_strings():
+    """Local models emit literal newlines inside string values; strict JSON rejects."""
+    parsed = _StaticBackend('{"issues": [{"message": "line1\nline2"}]}').generate_json(
+        "p"
+    )
+    assert parsed["issues"][0]["message"] == "line1\nline2"
+
+
+@pytest.mark.parametrize("raw", ["[]", "null", '"text"', '[{"severity": "critical"}]'])
+def test_generate_json_rejects_non_object_json(raw: str):
+    """Valid JSON that is not an object becomes an error dict, not a crash downstream."""
+    parsed = _StaticBackend(raw).generate_json("p")
+    assert "expected a JSON object" in parsed["error"]
+    assert parsed["issues"] == []
+
+
 def test_generate_json_keeps_fence_inside_string_value():
     """A ``` inside a JSON string must not be mistaken for a markdown fence."""
     payload = {
@@ -228,13 +244,6 @@ def test_anthropic_backend_invalid_effort():
         mock_anthropic_class.return_value = MagicMock()
         with pytest.raises(ValueError, match="Invalid effort"):
             AnthropicBackend(api_key="test-key", effort="turbo")
-
-
-def test_anthropic_backend_missing_package():
-    """Test AnthropicBackend raises error if anthropic not installed."""
-    with patch.dict("sys.modules", {"anthropic": None}):
-        with pytest.raises(ImportError, match="anthropic package required"):
-            AnthropicBackend(api_key="test-key")
 
 
 def test_anthropic_backend_generate():

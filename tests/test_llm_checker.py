@@ -520,3 +520,22 @@ def test_llm_quality_checker_rejects_invalid_effort(tmp_path):
     """An invalid effort fails fast here, not as a swallowed backend warning."""
     with pytest.raises(ValueError, match="Invalid effort"):
         LLMQualityChecker(tmp_path, ["m"], set(), effort="turbo")
+
+
+@patch("doc_checker.checkers_folder.quality.QualityChecker")
+def test_llm_quality_checker_config_error_raises_at_construction(mock_qc_class, tmp_path):
+    """Backend config errors (missing key, unknown backend) raise before any check."""
+    mock_qc_class.side_effect = ValueError("Anthropic API key required")
+    with pytest.raises(ValueError, match="API key required"):
+        LLMQualityChecker(tmp_path, ["m"], set(), backend_type="anthropic")
+
+
+@patch("doc_checker.checkers_folder.quality.QualityChecker")
+def test_llm_quality_checker_missing_dep_is_soft_skip(mock_qc_class, tmp_path):
+    """Missing package / unreachable local service only adds a warning."""
+    mock_qc_class.side_effect = ImportError("ollama package required")
+    checker = LLMQualityChecker(tmp_path, ["m"], set())
+    report = DriftReport()
+    checker.check(report)
+    assert report.quality_issues == []
+    assert any("ollama package required" in w for w in report.warnings)

@@ -35,8 +35,7 @@ noticeably better results if you have the VRAM — e.g. `qwen2.5-coder:14b`
 ```bash
 cd /path/to/doc_checker
 pip install -e ".[llm]"        # ollama backend
-# or ".[llm-openai]" / ".[llm-anthropic]" for the cloud backends,
-# ".[llm-all]" for all three
+# or ".[llm-openai]" for openai; anthropic ships with the core install
 ```
 
 ### 4. Run quality checks
