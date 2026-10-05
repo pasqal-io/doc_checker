@@ -52,9 +52,8 @@ def main() -> int:
     parser.add_argument(
         "--llm-effort",
         choices=sorted(VALID_EFFORTS),
-        default="medium",
         help="Effort level for the anthropic backend (default: medium; "
-        "lower is faster/cheaper, ignored by other backends)",
+        "lower is faster/cheaper; rejected for other backends)",
     )
     parser.add_argument(
         "--quality-sample",
@@ -113,6 +112,20 @@ def main() -> int:
         ]
     ):
         args.check_all = True
+
+    # Reject invalid/ignored flag combinations before any check or network call
+    if args.json and args.verbose:
+        parser.error("--verbose prints progress to stdout and would corrupt --json")
+    try:
+        DriftDetector.validate_args(
+            check_quality=args.check_all or args.check_quality,
+            quality_backend=args.llm_backend,
+            quality_sample_rate=args.quality_sample,
+            quality_min_severity=args.quality_min_severity,
+            quality_effort=args.llm_effort,
+        )
+    except ValueError as e:
+        parser.error(str(e))
 
     # Add root to Python path for imports
     sys.path.insert(0, str(args.root))

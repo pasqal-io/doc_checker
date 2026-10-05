@@ -740,6 +740,44 @@ class TestQualityChecks:
         # Verify sample_rate was passed
         mock_checker.check_module_quality.assert_called_with("test_pkg", True, 0.5)
 
+    @pytest.mark.parametrize(
+        ("kwargs", "match"),
+        [
+            ({"quality_backend": "gpt4all"}, "Unknown quality backend"),
+            ({"quality_min_severity": "info"}, "Invalid min severity"),
+            ({"quality_sample_rate": 0.0}, r"sample rate must be in \(0, 1\]"),
+            ({"quality_sample_rate": 1.5}, r"sample rate must be in \(0, 1\]"),
+            (
+                {"quality_effort": "turbo", "quality_backend": "anthropic"},
+                "Invalid effort",
+            ),
+            ({"quality_effort": "low", "check_quality": False}, "effort requires"),
+            ({"quality_effort": "low", "quality_backend": "openai"}, "anthropic backend"),
+        ],
+    )
+    def test_check_all_rejects_invalid_quality_args(
+        self, test_project: Path, kwargs: dict, match: str
+    ):
+        """Invalid or silently-ignored option combinations raise before any check."""
+        detector = DriftDetector(test_project, modules=["test_pkg"])
+        kwargs = {"check_quality": True, **kwargs}
+        with pytest.raises(ValueError, match=match):
+            detector.check_all(**kwargs)
+
+    def test_check_all_effort_with_anthropic_is_valid(self, test_project: Path):
+        """Effort + anthropic + check_quality passes validation, reaches the checker."""
+        from unittest.mock import patch
+
+        detector = DriftDetector(test_project, modules=["test_pkg"])
+        with patch(
+            "doc_checker.checkers_folder.quality.QualityChecker"
+        ) as mock_checker_class:
+            mock_checker_class.return_value.check_module_quality.return_value = []
+            detector.check_all(
+                check_quality=True, quality_backend="anthropic", quality_effort="low"
+            )
+        assert mock_checker_class.call_args.kwargs["effort"] == "low"
+
     def test_check_quality_backend_error(self, test_project: Path):
         """Test quality checks handle backend initialization errors."""
         from unittest.mock import patch
