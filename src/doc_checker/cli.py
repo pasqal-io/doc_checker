@@ -46,7 +46,7 @@ def main() -> int:
         "--llm-model",
         type=str,
         help="LLM model name (defaults: qwen3:1.7b for ollama, gpt-5.6-sol for "
-        "openai, claude-opus-5 for anthropic)",
+        "openai, claude-opus-5-5 for anthropic)",
     )
     parser.add_argument(
         "--llm-effort",

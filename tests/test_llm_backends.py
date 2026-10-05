@@ -157,7 +157,7 @@ def test_anthropic_backend_default_model():
     with patch("anthropic.Anthropic") as mock_anthropic_class:
         mock_anthropic_class.return_value = MagicMock()
         backend = AnthropicBackend(api_key="test-key")
-        assert backend.model == "claude-opus-5"
+        assert backend.model == "claude-opus-5-5"
 
 
 def test_anthropic_backend_api_key_from_env():
@@ -207,7 +207,7 @@ def test_anthropic_backend_generate():
 
         assert result == '{"issues": []}'
         mock_client.messages.create.assert_called_once_with(
-            model="claude-opus-5",
+            model="claude-opus-5-5",
             max_tokens=16384,
             output_config={
                 "effort": "low",
@@ -215,7 +215,7 @@ def test_anthropic_backend_generate():
             },
             messages=[{"role": "user", "content": "prompt"}],
         )
-        # Claude Opus 5 rejects sampling params with a 400 — must not be sent
+        # Claude Opus 5.5 rejects sampling params with a 400 — must not be sent
         assert "temperature" not in mock_client.messages.create.call_args.kwargs
 
 
@@ -309,7 +309,7 @@ def test_get_backend_anthropic(mock_anthropic_class):
 
     assert backend == mock_backend
     mock_anthropic_class.assert_called_once_with(
-        "claude-opus-5", "test-key", effort="medium"
+        "claude-opus-5-5", "test-key", effort="medium"
     )
 
 

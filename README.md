@@ -51,7 +51,7 @@ doc-checker --modules my_package --check-basic --root /path/to/project
 doc-checker --modules my_package --check-external-links --root /path/to/project
 
 # LLM quality checks (defaults: ollama/qwen3:1.7b, openai/gpt-5.6-sol,
-# anthropic/claude-opus-5)
+# anthropic/claude-opus-5-5)
 doc-checker --modules my_package --check-quality --root /path/to/project
 doc-checker --modules my_package --check-quality --llm-backend openai --root .
 doc-checker --modules my_package --check-quality --llm-backend anthropic --root .
@@ -88,12 +88,12 @@ doc-checker --modules my_package --check-basic -v --root /path/to/project
 > (e.g. `gpt-4o`) is unsupported *by the openai backend*. For non-reasoning /
 > non-thinking or local models, use the `ollama` backend, which runs any model.
 
-> **Anthropic backend.** The `anthropic` backend (default `claude-opus-5`) needs
+> **Anthropic backend.** The `anthropic` backend (default `claude-opus-5-5`) needs
 > `ANTHROPIC_API_KEY` set. It uses structured outputs, so responses are
 > API-guaranteed valid JSON. `--llm-effort {low,medium,high,xhigh,max}`
-> (default `medium`) is the speed/cost lever — Claude Opus 5 always thinks, and
+> (default `medium`) is the speed/cost lever — Claude Opus 5.5 always thinks, and
 > lower effort caps thinking depth. Sampling params (`temperature` etc.) are
-> not sent; Claude Opus 5 rejects them. Thinking counts against the response
+> not sent; Claude Opus 5.5 rejects them. Thinking counts against the response
 > token budget, so if an API is reported as `LLM stopped early:
 > stop_reason=max_tokens`, re-run with `--llm-effort low`.
 

@@ -151,17 +151,17 @@ class AnthropicBackend(LLMBackend):
 
     def __init__(
         self,
-        model: str = "claude-opus-5",
+        model: str = "claude-opus-5-5",
         api_key: str | None = None,
         effort: str = "medium",
     ):
         """Initialize Anthropic backend.
 
         Args:
-            model: Model name (claude-opus-5 recommended)
+            model: Model name (claude-opus-5-5 recommended)
             api_key: API key (defaults to ANTHROPIC_API_KEY env var)
             effort: Thinking/output effort level (low|medium|high|xhigh|max).
-                The speed/cost lever: Claude Opus 5 always thinks; lower effort
+                The speed/cost lever: Claude Opus 5.5 always thinks; lower effort
                 caps thinking depth.
 
         Raises:
@@ -198,7 +198,7 @@ class AnthropicBackend(LLMBackend):
 
         Sends the ISSUES_SCHEMA as a structured-outputs format, so a normal
         completion is guaranteed valid JSON and the shared ``generate_json``
-        parses it without fallback. No sampling params: Claude Opus 5 rejects
+        parses it without fallback. No sampling params: Claude Opus 5.5 rejects
         ``temperature``/``top_p``/``top_k`` with a 400.
         """
         from doc_checker.prompts import ISSUES_SCHEMA
@@ -255,7 +255,7 @@ def get_backend(
     elif backend_type == "openai":
         return OpenAIBackend(model or "gpt-5.6-sol", api_key)
     elif backend_type == "anthropic":
-        return AnthropicBackend(model or "claude-opus-5", api_key, effort=effort)
+        return AnthropicBackend(model or "claude-opus-5-5", api_key, effort=effort)
     else:
         raise ValueError(
             f"Unknown backend: {backend_type}. " "Choose from: ollama, openai, anthropic"
