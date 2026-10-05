@@ -99,11 +99,11 @@ class OllamaBackend(LLMBackend):
 class OpenAIBackend(LLMBackend):
     """OpenAI API backend."""
 
-    def __init__(self, model: str = "gpt-5.6-sol", api_key: str | None = None):
+    def __init__(self, model: str = "gpt-6.1-sol", api_key: str | None = None):
         """Initialize OpenAI backend.
 
         Args:
-            model: Model name (gpt-5.6-sol recommended)
+            model: Model name (gpt-6.1-sol recommended)
             api_key: API key (defaults to OPENAI_API_KEY env var)
 
         Raises:
@@ -132,7 +132,7 @@ class OpenAIBackend(LLMBackend):
     def generate(self, prompt: str) -> str:
         """Generate completion via OpenAI Responses API.
 
-        gpt-5.x reasoning models only accept the default ``temperature``, so
+        gpt-5.x/6.x reasoning models only accept the default ``temperature``, so
         none is sent.
         """
         response = self.client.responses.create(
@@ -253,7 +253,7 @@ def get_backend(
     if backend_type == "ollama":
         return OllamaBackend(model or "qwen3:1.7b")
     elif backend_type == "openai":
-        return OpenAIBackend(model or "gpt-5.6-sol", api_key)
+        return OpenAIBackend(model or "gpt-6.1-sol", api_key)
     elif backend_type == "anthropic":
         return AnthropicBackend(model or "claude-opus-5-5", api_key, effort=effort)
     else:

@@ -50,13 +50,13 @@ doc-checker --modules my_package --check-basic --root /path/to/project
 # External HTTP link validation only (slow)
 doc-checker --modules my_package --check-external-links --root /path/to/project
 
-# LLM quality checks (defaults: ollama/qwen3:1.7b, openai/gpt-5.6-sol,
+# LLM quality checks (defaults: ollama/qwen3:1.7b, openai/gpt-6.1-sol,
 # anthropic/claude-opus-5-5)
 doc-checker --modules my_package --check-quality --root /path/to/project
 doc-checker --modules my_package --check-quality --llm-backend openai --root .
 doc-checker --modules my_package --check-quality --llm-backend anthropic --root .
 doc-checker --modules my_package --check-quality --llm-backend anthropic --llm-effort low --root .
-doc-checker --modules my_package --check-quality --llm-model gpt-5.6-sol --root .
+doc-checker --modules my_package --check-quality --llm-model gpt-6.1-sol --root .
 doc-checker --modules my_package --check-quality --quality-sample 0.1 --root .
 
 # Quality reports only critical issues by default; widen to see more:
@@ -81,8 +81,8 @@ doc-checker --modules my_package --check-basic --warn-only --root /path/to/proje
 doc-checker --modules my_package --check-basic -v --root /path/to/project
 ```
 
-> **OpenAI backend: gpt-5.x only.** The `openai` backend targets the gpt-5.x
-> reasoning models (default `gpt-5.6-sol`) via the Responses API. These models only
+> **OpenAI backend: gpt-5.x/6.x reasoning models only.** The `openai` backend targets the gpt-5.x/6.x
+> reasoning models (default `gpt-6.1-sol`) via the Responses API. These models only
 > accept the default `temperature`, so the backend does not send a `temperature`
 > parameter. Pointing `--llm-model` at older non-reasoning chat models
 > (e.g. `gpt-4o`) is unsupported *by the openai backend*. For non-reasoning /

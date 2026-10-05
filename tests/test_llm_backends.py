@@ -88,7 +88,7 @@ def test_openai_backend_default_model():
     with patch("openai.OpenAI") as mock_openai_class:
         mock_openai_class.return_value = MagicMock()
         backend = OpenAIBackend(api_key="test-key")
-        assert backend.model == "gpt-5.6-sol"
+        assert backend.model == "gpt-6.1-sol"
 
 
 def test_openai_backend_api_key_from_env():
@@ -121,12 +121,12 @@ def test_openai_backend_generate():
         mock_client.responses.create.return_value = MagicMock(output_text="hello")
         mock_openai_class.return_value = mock_client
 
-        backend = OpenAIBackend(model="gpt-5.6-sol", api_key="test-key")
+        backend = OpenAIBackend(model="gpt-6.1-sol", api_key="test-key")
         result = backend.generate("prompt")
 
         assert result == "hello"
         mock_client.responses.create.assert_called_once_with(
-            model="gpt-5.6-sol",
+            model="gpt-6.1-sol",
             input="prompt",
             max_output_tokens=16384,
         )
@@ -284,7 +284,7 @@ def test_get_backend_openai(mock_openai_class):
     backend = get_backend(backend_type="openai", api_key="test-key")
 
     assert backend == mock_backend
-    mock_openai_class.assert_called_once_with("gpt-5.6-sol", "test-key")
+    mock_openai_class.assert_called_once_with("gpt-6.1-sol", "test-key")
 
 
 @patch("doc_checker.llm_backends.OpenAIBackend")
