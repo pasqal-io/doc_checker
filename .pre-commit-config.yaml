@@ -28,5 +28,6 @@ repos:
         additional_dependencies:
           - types-PyYAML
           - aiohttp>=3.8
+          - certifi
         args: [--config-file=pyproject.toml]
         exclude: ^tests/

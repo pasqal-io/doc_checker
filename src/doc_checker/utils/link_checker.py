@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 import asyncio
+import ssl
 from urllib.parse import urlparse
+
+import certifi
 
 from doc_checker.models import ExternalLink, LinkCheckResult
 
@@ -28,6 +31,9 @@ class LinkChecker:
     def __init__(self, timeout: float = 30.0, max_concurrent: int = 5):
         self.timeout = timeout
         self.max_concurrent = max_concurrent
+        # certifi bundle: python.org macOS builds ship an empty CA dir, so the
+        # default context fails every HTTPS handshake with CERTIFICATE_VERIFY_FAILED.
+        self.ssl_context = ssl.create_default_context(cafile=certifi.where())
 
     def check_links(
         self, links: list[ExternalLink], verbose: bool = False
@@ -47,7 +53,7 @@ class LinkChecker:
         filtered = [link for link in unique if not self._should_skip(link.url, verbose)]
 
         semaphore = asyncio.Semaphore(self.max_concurrent)
-        connector = aiohttp.TCPConnector(limit=self.max_concurrent)
+        connector = aiohttp.TCPConnector(limit=self.max_concurrent, ssl=self.ssl_context)
 
         async with aiohttp.ClientSession(
             connector=connector, headers={"User-Agent": self.USER_AGENT}
@@ -128,7 +134,9 @@ class LinkChecker:
                 req = urllib.request.Request(
                     link.url, headers={"User-Agent": self.USER_AGENT}, method="HEAD"
                 )
-                with urllib.request.urlopen(req, timeout=self.timeout) as response:
+                with urllib.request.urlopen(
+                    req, timeout=self.timeout, context=self.ssl_context
+                ) as response:
                     status = response.getcode()
                     results.append(
                         LinkCheckResult(

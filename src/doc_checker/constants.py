@@ -40,3 +40,14 @@ SEVERITY_RANK = {
     "warning": 2,
     "critical": 3,
 }
+
+# Default model per LLM backend. Single source for get_backend(), the report's
+# llm_model field, and the CLI help text.
+DEFAULT_MODELS = {
+    "ollama": "qwen3:1.7b",
+    "openai": "gpt-6.1-sol",
+    "anthropic": "claude-opus-5-5",
+}
+
+# Effort levels accepted by the anthropic backend (--llm-effort).
+VALID_EFFORTS = {"low", "medium", "high", "xhigh", "max"}

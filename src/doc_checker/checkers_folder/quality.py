@@ -4,7 +4,7 @@ import math
 import random
 from pathlib import Path
 
-from doc_checker.constants import SEVERITY_RANK
+from doc_checker.constants import SEVERITY_RANK, VALID_EFFORTS
 from doc_checker.llm_backends import get_backend
 from doc_checker.models import DriftReport, QualityIssue, SignatureInfo
 from doc_checker.prompts import get_combined_quality_prompt
@@ -42,8 +42,8 @@ def _single_issue(
 class LLMQualityChecker(Checker):
     """LLM-based docstring quality analysis.
 
-    Supports ollama and openai backends. Checks docstring completeness,
-    clarity, and accuracy for public APIs.
+    Supports ollama, openai and anthropic backends. Checks docstring
+    completeness, clarity, and accuracy for public APIs.
     """
 
     def __init__(
@@ -57,6 +57,7 @@ class LLMQualityChecker(Checker):
         sample_rate: float = 1.0,
         min_severity: str = "critical",
         verbose: bool = False,
+        effort: str = "medium",
     ):
         self.root_path = root_path
         self.modules = modules
@@ -64,6 +65,11 @@ class LLMQualityChecker(Checker):
         self.backend_type = backend_type
         self.model = model
         self.api_key = api_key
+        if effort not in VALID_EFFORTS:
+            raise ValueError(
+                f"Invalid effort {effort!r}; choose from {sorted(VALID_EFFORTS)}"
+            )
+        self.effort = effort
         self.sample_rate = sample_rate
         if min_severity not in SEVERITY_RANK:
             raise ValueError(
@@ -72,20 +78,29 @@ class LLMQualityChecker(Checker):
             )
         self.min_severity = min_severity
         self.verbose = verbose
-
-    def check(self, report: DriftReport) -> None:
-        """Run LLM quality checks; skip with warning if deps missing."""
+        # Build the backend now so config errors (missing API key, unknown backend)
+        # raise ValueError before any checker runs. Only a missing package or an
+        # unreachable local service is a soft skip.
+        self._checker: QualityChecker | None = None
+        self._skip_reason: str | None = None
         try:
-            checker = QualityChecker(
+            self._checker = QualityChecker(
                 self.root_path,
                 self.backend_type,
                 self.model,
                 self.api_key,
                 ignore_submodules=self.ignore_submodules,
+                effort=self.effort,
             )
-        except (ImportError, RuntimeError, ValueError) as e:
-            report.warnings.append(f"Quality checks skipped: {e}")
+        except (ImportError, RuntimeError) as e:
+            self._skip_reason = str(e)
+
+    def check(self, report: DriftReport) -> None:
+        """Run LLM quality checks; skip with warning if deps missing."""
+        if self._checker is None:
+            report.warnings.append(f"Quality checks skipped: {self._skip_reason}")
             return
+        checker = self._checker
         if self.verbose:
             print(f"LLM quality checks ({self.backend_type}, {checker.backend.model})...")
         threshold = SEVERITY_RANK[self.min_severity]
@@ -108,15 +123,17 @@ class QualityChecker:
         model: str | None = None,
         api_key: str | None = None,
         ignore_submodules: set[str] | None = None,
+        effort: str = "medium",
     ):
         """Initialize quality checker.
 
         Args:
             root_path: Project root path
-            backend_type: "ollama" (default) or "openai"
+            backend_type: "ollama" (default), "openai" or "anthropic"
             model: Model name (uses defaults if None)
             api_key: API key for cloud backends
             ignore_submodules: Submodule names to skip.
+            effort: Effort level for the anthropic backend (ignored by others).
 
         Raises:
             ImportError: If backend package not installed
@@ -124,7 +141,7 @@ class QualityChecker:
         """
         self.root_path = root_path
         self.code_analyzer = CodeAnalyzer(root_path)
-        self.backend = get_backend(backend_type, model, api_key)
+        self.backend = get_backend(backend_type, model, api_key, effort=effort)
         self.ignore_submodules = ignore_submodules
 
     def check_api_quality(
@@ -246,7 +263,7 @@ class QualityChecker:
         Args:
             module_name: Module to check (e.g., "emu_mps")
             verbose: Print progress
-            sample_rate: Check only this fraction of APIs (0.0-1.0)
+            sample_rate: Check only this fraction of APIs, in (0.0, 1.0]
 
         Returns:
             List of all quality issues found

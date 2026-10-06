@@ -18,6 +18,7 @@ from doc_checker.checkers_folder.local_links import LocalLinksChecker
 from doc_checker.checkers_folder.nav_paths import NavPathsChecker
 from doc_checker.checkers_folder.quality import LLMQualityChecker
 from doc_checker.checkers_folder.references import ReferencesChecker
+from doc_checker.constants import DEFAULT_MODELS, SEVERITY_RANK, VALID_EFFORTS
 from doc_checker.utils.code_analyzer import CodeAnalyzer
 from doc_checker.utils.link_checker import LinkChecker
 from doc_checker.utils.parsers import MarkdownParser, YamlParser
@@ -56,6 +57,52 @@ class DriftDetector:
         self.yaml_parser = YamlParser(root_path / "mkdocs.yml", root_path / "docs")
         self.link_checker = LinkChecker()
 
+    @staticmethod
+    def validate_args(
+        check_quality: bool = False,
+        quality_backend: str = "ollama",
+        quality_sample_rate: float = 1.0,
+        quality_min_severity: str = "critical",
+        quality_effort: str | None = None,
+    ) -> None:
+        """Reject invalid or silently-ignored quality option combinations.
+
+        Called at the start of check_all; the CLI calls it too so bad flags fail
+        before any API-key pre-flight or network call.
+
+        Raises:
+            ValueError: Unknown backend/severity, sample rate outside (0, 1],
+                or an effort given without check_quality / with a non-anthropic
+                backend (effort is only honoured by the anthropic backend).
+        """
+        if quality_backend not in DEFAULT_MODELS:
+            raise ValueError(
+                f"Unknown quality backend {quality_backend!r}; "
+                f"choose from {sorted(DEFAULT_MODELS)}"
+            )
+        if quality_min_severity not in SEVERITY_RANK:
+            raise ValueError(
+                f"Invalid min severity {quality_min_severity!r}; "
+                f"choose from {sorted(SEVERITY_RANK)}"
+            )
+        if not 0.0 < quality_sample_rate <= 1.0:
+            raise ValueError(
+                f"quality sample rate must be in (0, 1], got {quality_sample_rate}"
+            )
+        if quality_effort is not None:
+            if quality_effort not in VALID_EFFORTS:
+                raise ValueError(
+                    f"Invalid effort {quality_effort!r}; "
+                    f"choose from {sorted(VALID_EFFORTS)}"
+                )
+            if not check_quality:
+                raise ValueError("effort requires quality checks to be enabled")
+            if quality_backend != "anthropic":
+                raise ValueError(
+                    "effort is only supported by the anthropic backend "
+                    f"(got {quality_backend!r})"
+                )
+
     def check_all(
         self,
         check_external_links: bool = False,
@@ -65,6 +112,7 @@ class DriftDetector:
         quality_api_key: str | None = None,
         quality_sample_rate: float = 1.0,
         quality_min_severity: str = "critical",
+        quality_effort: str | None = None,
         verbose: bool = False,
         skip_basic_checks: bool = False,
     ) -> DriftReport:
@@ -77,10 +125,14 @@ class DriftDetector:
         Args:
             check_external_links: Validate HTTP/HTTPS links via async requests.
             check_quality: Run LLM quality analysis on docstrings.
-            quality_backend: LLM backend ("ollama" or "openai").
+            quality_backend: LLM backend ("ollama", "openai" or "anthropic").
             quality_model: Model name override (defaults per backend).
-            quality_api_key: API key for openai backend.
-            quality_sample_rate: Fraction of APIs to check (0.0-1.0).
+            quality_api_key: API key for cloud backends.
+            quality_sample_rate: Fraction of APIs to check, in (0.0, 1.0].
+            quality_effort: Effort level for the anthropic backend
+                (low|medium|high|xhigh|max; None = backend default "medium").
+                Passing it with another backend or without check_quality is an
+                error, since it would be silently ignored.
             quality_min_severity: Drop quality issues below this severity
                 ("suggestion", "warning", or "critical"). Default "critical"
                 reports only the most important issues.
@@ -89,14 +141,21 @@ class DriftDetector:
 
         Returns:
             DriftReport with all detected issues.
+
+        Raises:
+            ValueError: See validate_args.
         """
+        self.validate_args(
+            check_quality,
+            quality_backend,
+            quality_sample_rate,
+            quality_min_severity,
+            quality_effort,
+        )
         report = DriftReport()
         if check_quality:
             report.llm_backend = quality_backend
-            report.llm_model = quality_model or {
-                "ollama": "qwen3:1.7b",
-                "openai": "gpt-5.6-sol",
-            }.get(quality_backend)
+            report.llm_model = quality_model or DEFAULT_MODELS.get(quality_backend)
         self._warn_unmatched_ignores(report)
         checkers: list[Checker] = []
         if not skip_basic_checks:
@@ -138,12 +197,13 @@ class DriftDetector:
                     self.root_path,
                     self.modules,
                     self.ignore_submodules,
-                    quality_backend,
-                    quality_model,
-                    quality_api_key,
-                    quality_sample_rate,
-                    quality_min_severity,
-                    verbose,
+                    backend_type=quality_backend,
+                    model=quality_model,
+                    api_key=quality_api_key,
+                    sample_rate=quality_sample_rate,
+                    min_severity=quality_min_severity,
+                    verbose=verbose,
+                    effort=quality_effort or "medium",
                 )
             )
         for checker in checkers:

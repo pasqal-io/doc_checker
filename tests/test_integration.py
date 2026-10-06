@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -511,3 +512,98 @@ class TestWarnOnly:
         ]
         with patch("sys.argv", argv):
             assert main() == 1
+
+
+class TestArgValidation:
+    """Invalid flag combinations exit 2 (argparse error) before any check runs."""
+
+    @pytest.mark.parametrize(
+        ("extra", "needle"),
+        [
+            (["--check-quality", "--llm-effort", "low"], "anthropic backend"),  # ollama
+            (["--llm-effort", "low", "--llm-backend", "openai"], "anthropic backend"),
+            (["--check-basic", "--llm-effort", "low"], "effort requires"),
+            (["--check-external-links", "--llm-effort", "low"], "effort requires"),
+            (["--check-quality", "--quality-sample", "0"], "sample rate"),
+            (["--check-quality", "--quality-sample", "2"], "sample rate"),
+            (["--check-basic", "--json", "--verbose"], "--json"),
+        ],
+    )
+    def test_invalid_combination_exits_two(
+        self, integration_project: Path, capsys, extra: list[str], needle: str
+    ):
+        argv = ["doc-checker", *extra, "--modules", "my_lib", "--root"]
+        argv.append(str(integration_project))
+        with patch("sys.argv", argv), pytest.raises(SystemExit) as exc:
+            main()
+        assert exc.value.code == 2
+        captured = capsys.readouterr()
+        assert needle in captured.err
+        assert "DOCUMENTATION DRIFT REPORT" not in captured.out
+
+    def test_effort_with_anthropic_passes_validation(
+        self, integration_project: Path, capsys
+    ):
+        """Valid combo reaches the key pre-flight (exit 1 naming the env var)."""
+        argv = [
+            "doc-checker",
+            "--check-quality",
+            "--llm-backend",
+            "anthropic",
+            "--llm-effort",
+            "low",
+            "--modules",
+            "my_lib",
+            "--root",
+            str(integration_project),
+        ]
+        env = {k: v for k, v in os.environ.items() if k != "ANTHROPIC_API_KEY"}
+        with patch("sys.argv", argv), patch.dict("os.environ", env, clear=True):
+            assert main() == 1
+        assert "ANTHROPIC_API_KEY" in capsys.readouterr().err
+
+
+class TestQualityPreflight:
+    """A missing cloud API key exits 1 before any check, explicit or implicit."""
+
+    def _argv(
+        self, integration_project: Path, backend: str, check_flag: str | None
+    ) -> list[str]:
+        return [
+            "doc-checker",
+            *([check_flag] if check_flag else []),
+            "--llm-backend",
+            backend,
+            "--modules",
+            "my_lib",
+            "--root",
+            str(integration_project),
+        ]
+
+    @pytest.mark.parametrize("check_flag", ["--check-quality", "--check-all", None])
+    @pytest.mark.parametrize(
+        ("backend", "env_var"),
+        [("anthropic", "ANTHROPIC_API_KEY"), ("openai", "OPENAI_API_KEY")],
+    )
+    def test_missing_key_exits_one_before_any_check(
+        self,
+        integration_project: Path,
+        capsys,
+        backend: str,
+        env_var: str,
+        check_flag: str | None,
+    ):
+        """Quality enabled without the key exits 1 naming the env var.
+
+        Covers explicit --check-quality, --check-all and the implicit run-all path
+        (no check flags). The fixture already has basic drift, so exit code alone
+        is not proof: also require the stderr hint and that no report was printed
+        (the backend is built before any checker runs).
+        """
+        argv = self._argv(integration_project, backend, check_flag)
+        env = {k: v for k, v in os.environ.items() if k != env_var}
+        with patch("sys.argv", argv), patch.dict("os.environ", env, clear=True):
+            assert main() == 1
+        captured = capsys.readouterr()
+        assert env_var in captured.err
+        assert "DOCUMENTATION DRIFT REPORT" not in captured.out

@@ -88,8 +88,22 @@ def test_quality_checker_init(mock_analyzer_class, mock_get_backend, tmp_path):
 
     assert checker.root_path == tmp_path
     assert checker.backend == mock_backend
-    mock_get_backend.assert_called_once_with("ollama", "qwen2.5:3b", None)
+    mock_get_backend.assert_called_once_with(
+        "ollama", "qwen2.5:3b", None, effort="medium"
+    )
     mock_analyzer_class.assert_called_once_with(tmp_path)
+
+
+@patch("doc_checker.checkers_folder.quality.get_backend")
+@patch("doc_checker.checkers_folder.quality.CodeAnalyzer")
+def test_quality_checker_forwards_effort(mock_analyzer_class, mock_get_backend, tmp_path):
+    """Test QualityChecker forwards effort to get_backend (anthropic lever)."""
+    mock_get_backend.return_value = MagicMock()
+    mock_analyzer_class.return_value = MagicMock()
+
+    QualityChecker(tmp_path, backend_type="anthropic", api_key="k", effort="low")
+
+    mock_get_backend.assert_called_once_with("anthropic", None, "k", effort="low")
 
 
 @patch("doc_checker.checkers_folder.quality.get_backend")
@@ -500,3 +514,28 @@ def test_llm_quality_checker_rejects_invalid_min_severity(tmp_path):
     """An invalid min_severity fails fast with a clear error, not a later KeyError."""
     with pytest.raises(ValueError, match="Invalid min_severity"):
         LLMQualityChecker(tmp_path, ["m"], set(), min_severity="warn")
+
+
+def test_llm_quality_checker_rejects_invalid_effort(tmp_path):
+    """An invalid effort fails fast here, not as a swallowed backend warning."""
+    with pytest.raises(ValueError, match="Invalid effort"):
+        LLMQualityChecker(tmp_path, ["m"], set(), effort="turbo")
+
+
+@patch("doc_checker.checkers_folder.quality.QualityChecker")
+def test_llm_quality_checker_config_error_raises_at_construction(mock_qc_class, tmp_path):
+    """Backend config errors (missing key, unknown backend) raise before any check."""
+    mock_qc_class.side_effect = ValueError("Anthropic API key required")
+    with pytest.raises(ValueError, match="API key required"):
+        LLMQualityChecker(tmp_path, ["m"], set(), backend_type="anthropic")
+
+
+@patch("doc_checker.checkers_folder.quality.QualityChecker")
+def test_llm_quality_checker_missing_dep_is_soft_skip(mock_qc_class, tmp_path):
+    """Missing package / unreachable local service only adds a warning."""
+    mock_qc_class.side_effect = ImportError("ollama package required")
+    checker = LLMQualityChecker(tmp_path, ["m"], set())
+    report = DriftReport()
+    checker.check(report)
+    assert report.quality_issues == []
+    assert any("ollama package required" in w for w in report.warnings)
