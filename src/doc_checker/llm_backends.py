@@ -109,7 +109,8 @@ class OllamaBackend(LLMBackend):
             prompt=prompt,
             options={
                 "temperature": 0.1,  # low, for deterministic JSON output
-                "num_predict": 4096,
+                # Same cap as the cloud backends; thinking tokens count against it.
+                "num_predict": 16384,
             },
         )
         result: str = response["response"]
