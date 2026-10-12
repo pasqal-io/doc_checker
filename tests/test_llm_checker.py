@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import threading
+import time
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -381,6 +383,144 @@ def test_quality_checker_sample_rate_small_module_checks_at_least_one(
     issues = checker.check_module_quality("test_module", verbose=False, sample_rate=0.1)
 
     assert len(issues) == 1
+
+
+def _documented_apis(n: int) -> list[SignatureInfo]:
+    """n documented functions func_0..func_{n-1} in module 'm'."""
+    return [
+        SignatureInfo(
+            name=f"func_{i}",
+            module="m",
+            parameters=[],
+            return_annotation=None,
+            docstring=f"Docstring {i}.",
+            is_public=True,
+            kind="function",
+        )
+        for i in range(n)
+    ]
+
+
+def _analyzer_with(apis: list[SignatureInfo]) -> MagicMock:
+    analyzer = MagicMock()
+    analyzer.get_all_public_apis.return_value = (apis, set())
+    analyzer.get_canonical_key.return_value = None
+    return analyzer
+
+
+class _PeakCounter:
+    """Backend stub that records how many generate_json calls overlap."""
+
+    def __init__(self) -> None:
+        self.active = 0
+        self.peak = 0
+        self.lock = threading.Lock()
+
+    def __call__(self, prompt: str) -> dict:
+        with self.lock:
+            self.active += 1
+            self.peak = max(self.peak, self.active)
+        time.sleep(0.05)
+        with self.lock:
+            self.active -= 1
+        return {"issues": []}
+
+
+@pytest.mark.parametrize(("max_workers", "expect_parallel"), [(5, True), (1, False)])
+@patch("doc_checker.checkers_folder.quality.get_backend")
+@patch("doc_checker.checkers_folder.quality.CodeAnalyzer")
+def test_check_module_quality_concurrency(
+    mock_analyzer_class, mock_get_backend, tmp_path, max_workers, expect_parallel
+):
+    """Default workers overlap LLM calls; max_workers=1 never does."""
+    counter = _PeakCounter()
+    backend = MagicMock()
+    backend.generate_json.side_effect = counter
+    mock_get_backend.return_value = backend
+    mock_analyzer_class.return_value = _analyzer_with(_documented_apis(4))
+
+    checker = QualityChecker(tmp_path, max_workers=max_workers)
+    checker.check_module_quality("m")
+
+    assert backend.generate_json.call_count == 4
+    assert (counter.peak > 1) is expect_parallel
+
+
+@patch("doc_checker.checkers_folder.quality.get_backend")
+@patch("doc_checker.checkers_folder.quality.CodeAnalyzer")
+def test_check_module_quality_order_is_deterministic(
+    mock_analyzer_class, mock_get_backend, tmp_path
+):
+    """Issues come back in unique_apis order even when later APIs finish first."""
+    mock_get_backend.return_value = MagicMock()
+    apis = _documented_apis(4)
+    mock_analyzer_class.return_value = _analyzer_with(apis)
+    checker = QualityChecker(tmp_path, max_workers=5)
+
+    def _single_issue_for(name: str) -> list[QualityIssue]:
+        return [
+            QualityIssue(
+                api_name=f"m.{name}",
+                severity="critical",
+                category="x",
+                message=name,
+                suggestion="",
+                line_reference=None,
+            )
+        ]
+
+    def slow_first(api: SignatureInfo, verbose: bool = False) -> list[QualityIssue]:
+        # func_0 sleeps longest so completion order is the reverse of input order
+        time.sleep(0.05 * (len(apis) - int(api.name.split("_")[1])))
+        return _single_issue_for(api.name)
+
+    with patch.object(checker, "_check_api_info", side_effect=slow_first):
+        issues = checker.check_module_quality("m")
+
+    assert [i.message for i in issues] == ["func_0", "func_1", "func_2", "func_3"]
+
+
+@patch("doc_checker.checkers_folder.quality.get_backend")
+@patch("doc_checker.checkers_folder.quality.CodeAnalyzer")
+def test_one_failing_api_does_not_abort_others(
+    mock_analyzer_class, mock_get_backend, tmp_path
+):
+    """A backend exception for one API yields one error issue; the rest complete."""
+    backend = MagicMock()
+
+    def flaky(prompt: str) -> dict:
+        if "m.func_1" in prompt:
+            raise RuntimeError("boom")
+        return {"issues": []}
+
+    backend.generate_json.side_effect = flaky
+    mock_get_backend.return_value = backend
+    mock_analyzer_class.return_value = _analyzer_with(_documented_apis(3))
+
+    checker = QualityChecker(tmp_path, max_workers=5)
+    issues = checker.check_module_quality("m")
+
+    assert backend.generate_json.call_count == 3
+    assert [(i.api_name, i.category) for i in issues] == [("m.func_1", "error")]
+    assert "boom" in issues[0].message
+
+
+@patch("doc_checker.checkers_folder.quality.ThreadPoolExecutor")
+@patch("doc_checker.checkers_folder.quality.get_backend")
+@patch("doc_checker.checkers_folder.quality.CodeAnalyzer")
+def test_max_workers_one_is_sequential(
+    mock_analyzer_class, mock_get_backend, mock_pool_class, tmp_path
+):
+    """max_workers=1 takes the plain loop: no executor is ever constructed."""
+    backend = MagicMock()
+    backend.generate_json.return_value = {"issues": []}
+    mock_get_backend.return_value = backend
+    mock_analyzer_class.return_value = _analyzer_with(_documented_apis(3))
+
+    QualityChecker(tmp_path, max_workers=1).check_module_quality("m")
+
+    mock_pool_class.assert_not_called()
+    assert backend.generate_json.call_count == 3
 
 
 @patch("doc_checker.checkers_folder.quality.get_backend")

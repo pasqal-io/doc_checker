@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import math
 import random
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from doc_checker.constants import SEVERITY_RANK, VALID_EFFORTS
@@ -124,6 +125,7 @@ class QualityChecker:
         api_key: str | None = None,
         ignore_submodules: set[str] | None = None,
         effort: str = "medium",
+        max_workers: int = 5,
     ):
         """Initialize quality checker.
 
@@ -134,6 +136,7 @@ class QualityChecker:
             api_key: API key for cloud backends
             ignore_submodules: Submodule names to skip.
             effort: Effort level for the anthropic backend (ignored by others).
+            max_workers: Parallel LLM calls per module; 1 = sequential.
 
         Raises:
             ImportError: If backend package not installed
@@ -143,6 +146,7 @@ class QualityChecker:
         self.code_analyzer = CodeAnalyzer(root_path)
         self.backend = get_backend(backend_type, model, api_key, effort=effort)
         self.ignore_submodules = ignore_submodules
+        self.max_workers = max_workers
 
     def check_api_quality(
         self, api_name: str, module_name: str, verbose: bool = False
@@ -307,8 +311,17 @@ class QualityChecker:
         if verbose:
             print(f"Checking {len(unique_apis)} APIs in {module_name}...")
 
-        all_issues = []
-        for api in unique_apis:
-            all_issues.extend(self._check_api_info(api, verbose))
+        # Each API is an independent blocking LLM call, so run them on a bounded
+        # thread pool. pool.map preserves input order, keeping issue ordering
+        # deterministic; _check_api_info already swallows backend exceptions into
+        # a single error issue, so one failure never aborts the rest.
+        if self.max_workers <= 1 or len(unique_apis) <= 1:
+            results = [self._check_api_info(api, verbose) for api in unique_apis]
+        else:
+            workers = min(self.max_workers, len(unique_apis))
+            with ThreadPoolExecutor(max_workers=workers) as pool:
+                results = list(
+                    pool.map(lambda api: self._check_api_info(api, verbose), unique_apis)
+                )
 
-        return all_issues
+        return [issue for issues in results for issue in issues]
