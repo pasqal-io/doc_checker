@@ -96,6 +96,15 @@ doc-checker --modules my_package --check-basic -v --root /path/to/project
 > token budget, so if an API is reported as `LLM stopped early:
 > stop_reason=max_tokens`, re-run with `--llm-effort low`.
 
+> **Parallelism.** `--quality-jobs N` (default 5) runs N LLM calls at once; with
+> cloud backends the speedup is close to linear. With the `ollama` backend the
+> ceiling is the server, not the flag: Ollama runs at most `OLLAMA_NUM_PARALLEL`
+> requests concurrently (auto-chosen from free memory when unset, typically 4
+> for small models) and queues the rest, so raising `--quality-jobs` above it
+> only lengthens the queue. To go higher, restart the server with e.g.
+> `OLLAMA_NUM_PARALLEL=5 ollama serve`. Measured on an 8-API module with
+> `qwen3:1.7b`: 500 s at `--quality-jobs 1`, 163 s at the default 5.
+
 ### Quality severity
 
 Every quality issue the model returns is rated `critical`, `warning`, or
