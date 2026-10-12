@@ -56,6 +56,7 @@ doc-checker --modules my_package --check-quality --llm-backend anthropic --root 
 doc-checker --modules my_package --check-quality --llm-backend anthropic --llm-effort low --root .
 doc-checker --modules my_package --check-quality --llm-model gpt-6.1-sol --root .
 doc-checker --modules my_package --check-quality --quality-sample 0.1 --root .
+doc-checker --modules my_package --check-quality --quality-jobs 10 --root .   # parallel LLM calls (default 5, 1 = sequential)
 
 # Quality reports only critical issues by default; widen to see more:
 doc-checker --modules my_package --check-quality --quality-min-severity warning --root .

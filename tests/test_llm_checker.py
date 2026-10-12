@@ -679,3 +679,12 @@ def test_llm_quality_checker_missing_dep_is_soft_skip(mock_qc_class, tmp_path):
     checker.check(report)
     assert report.quality_issues == []
     assert any("ollama package required" in w for w in report.warnings)
+
+
+@patch("doc_checker.checkers_folder.quality.QualityChecker")
+def test_llm_quality_checker_forwards_max_workers(mock_qc_class, tmp_path):
+    """max_workers reaches the inner QualityChecker (default 5)."""
+    LLMQualityChecker(tmp_path, ["m"], set())
+    assert mock_qc_class.call_args.kwargs["max_workers"] == 5
+    LLMQualityChecker(tmp_path, ["m"], set(), max_workers=2)
+    assert mock_qc_class.call_args.kwargs["max_workers"] == 2

@@ -59,6 +59,7 @@ class LLMQualityChecker(Checker):
         min_severity: str = "critical",
         verbose: bool = False,
         effort: str = "medium",
+        max_workers: int = 5,
     ):
         self.root_path = root_path
         self.modules = modules
@@ -79,6 +80,7 @@ class LLMQualityChecker(Checker):
             )
         self.min_severity = min_severity
         self.verbose = verbose
+        self.max_workers = max_workers
         # Build the backend now so config errors (missing API key, unknown backend)
         # raise ValueError before any checker runs. Only a missing package or an
         # unreachable local service is a soft skip.
@@ -92,6 +94,7 @@ class LLMQualityChecker(Checker):
                 self.api_key,
                 ignore_submodules=self.ignore_submodules,
                 effort=self.effort,
+                max_workers=self.max_workers,
             )
         except (ImportError, RuntimeError) as e:
             self._skip_reason = str(e)

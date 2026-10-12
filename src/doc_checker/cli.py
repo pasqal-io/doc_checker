@@ -67,6 +67,14 @@ def main() -> int:
         help="Minimum severity to report (default: critical; use 'warning' or "
         "'suggestion' to also see less severe issues)",
     )
+    parser.add_argument(
+        "--quality-jobs",
+        type=int,
+        default=5,
+        metavar="N",
+        help="Parallel LLM quality calls per module (default: 5). With N > 1, "
+        "--verbose progress lines may interleave; use 1 for sequential output.",
+    )
     parser.add_argument("--verbose", "-v", action="store_true", help="Verbose output")
     parser.add_argument("--json", action="store_true", help="Output as JSON")
     parser.add_argument(
@@ -122,6 +130,7 @@ def main() -> int:
             quality_sample_rate=args.quality_sample,
             quality_min_severity=args.quality_min_severity,
             quality_effort=args.llm_effort,
+            quality_jobs=args.quality_jobs,
         )
     except ValueError as e:
         parser.error(str(e))
@@ -153,6 +162,7 @@ def main() -> int:
                 quality_sample_rate=args.quality_sample,
                 quality_min_severity=args.quality_min_severity,
                 quality_effort=args.llm_effort,
+                quality_jobs=args.quality_jobs,
                 verbose=args.verbose,
             )
         except ValueError as e:

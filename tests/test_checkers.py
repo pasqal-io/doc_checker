@@ -753,6 +753,8 @@ class TestQualityChecks:
             ),
             ({"quality_effort": "low", "check_quality": False}, "effort requires"),
             ({"quality_effort": "low", "quality_backend": "openai"}, "anthropic backend"),
+            ({"quality_jobs": 0}, "quality jobs must be >= 1"),
+            ({"quality_jobs": -3}, "quality jobs must be >= 1"),
         ],
     )
     def test_check_all_rejects_invalid_quality_args(
@@ -763,6 +765,16 @@ class TestQualityChecks:
         kwargs = {"check_quality": True, **kwargs}
         with pytest.raises(ValueError, match=match):
             detector.check_all(**kwargs)
+
+    def test_check_all_passes_quality_jobs(self, test_project: Path):
+        """quality_jobs reaches LLMQualityChecker as max_workers."""
+        from unittest.mock import patch
+
+        detector = DriftDetector(test_project, modules=["test_pkg"])
+        with patch("doc_checker.checkers.LLMQualityChecker") as mock_cls:
+            mock_cls.return_value.check.return_value = None
+            detector.check_all(check_quality=True, quality_jobs=3)
+        assert mock_cls.call_args.kwargs["max_workers"] == 3
 
     def test_check_all_effort_with_anthropic_is_valid(self, test_project: Path):
         """Effort + anthropic + check_quality passes validation, reaches the checker."""

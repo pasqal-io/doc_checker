@@ -526,6 +526,8 @@ class TestArgValidation:
             (["--check-external-links", "--llm-effort", "low"], "effort requires"),
             (["--check-quality", "--quality-sample", "0"], "sample rate"),
             (["--check-quality", "--quality-sample", "2"], "sample rate"),
+            (["--check-quality", "--quality-jobs", "0"], "quality jobs"),
+            (["--check-quality", "--quality-jobs", "-1"], "quality jobs"),
             (["--check-basic", "--json", "--verbose"], "--json"),
         ],
     )
