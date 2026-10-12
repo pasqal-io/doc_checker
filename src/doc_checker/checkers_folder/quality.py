@@ -5,7 +5,7 @@ import random
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
-from doc_checker.constants import SEVERITY_RANK, VALID_EFFORTS
+from doc_checker.constants import DEFAULT_QUALITY_JOBS, SEVERITY_RANK, VALID_EFFORTS
 from doc_checker.llm_backends import get_backend
 from doc_checker.models import DriftReport, QualityIssue, SignatureInfo
 from doc_checker.prompts import get_combined_quality_prompt
@@ -59,7 +59,7 @@ class LLMQualityChecker(Checker):
         min_severity: str = "critical",
         verbose: bool = False,
         effort: str = "medium",
-        max_workers: int = 5,
+        max_workers: int = DEFAULT_QUALITY_JOBS,
     ):
         self.root_path = root_path
         self.modules = modules
@@ -128,7 +128,7 @@ class QualityChecker:
         api_key: str | None = None,
         ignore_submodules: set[str] | None = None,
         effort: str = "medium",
-        max_workers: int = 5,
+        max_workers: int = DEFAULT_QUALITY_JOBS,
     ):
         """Initialize quality checker.
 
@@ -315,16 +315,19 @@ class QualityChecker:
             print(f"Checking {len(unique_apis)} APIs in {module_name}...")
 
         # Each API is an independent blocking LLM call, so run them on a bounded
-        # thread pool. pool.map preserves input order, keeping issue ordering
-        # deterministic; _check_api_info already swallows backend exceptions into
-        # a single error issue, so one failure never aborts the rest.
-        if self.max_workers <= 1 or len(unique_apis) <= 1:
-            results = [self._check_api_info(api, verbose) for api in unique_apis]
-        else:
-            workers = min(self.max_workers, len(unique_apis))
-            with ThreadPoolExecutor(max_workers=workers) as pool:
-                results = list(
-                    pool.map(lambda api: self._check_api_info(api, verbose), unique_apis)
-                )
+        # thread pool (1 worker == the old sequential loop). pool.map preserves
+        # input order, keeping issue ordering deterministic, and _check_api_info
+        # turns backend exceptions into a single error issue so one bad LLM call
+        # never aborts the rest. Not a `with` block: Executor.__exit__ would drain
+        # every queued call on Ctrl-C; cancel_futures drops the ones not started.
+        pool = ThreadPoolExecutor(
+            max_workers=max(1, min(self.max_workers, len(unique_apis)))
+        )
+        try:
+            results = list(
+                pool.map(lambda api: self._check_api_info(api, verbose), unique_apis)
+            )
+        finally:
+            pool.shutdown(wait=True, cancel_futures=True)
 
         return [issue for issues in results for issue in issues]

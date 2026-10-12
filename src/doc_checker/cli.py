@@ -8,7 +8,7 @@ import sys
 from pathlib import Path
 
 from .checkers import DriftDetector
-from .constants import DEFAULT_MODELS, VALID_EFFORTS
+from .constants import DEFAULT_MODELS, DEFAULT_QUALITY_JOBS, VALID_EFFORTS
 from .formatters import format_report
 
 
@@ -70,10 +70,11 @@ def main() -> int:
     parser.add_argument(
         "--quality-jobs",
         type=int,
-        default=5,
+        default=DEFAULT_QUALITY_JOBS,
         metavar="N",
-        help="Parallel LLM quality calls per module (default: 5). With N > 1, "
-        "--verbose progress lines may interleave; use 1 for sequential output.",
+        help=f"Parallel LLM quality calls per module (default: {DEFAULT_QUALITY_JOBS}). "
+        "With N > 1, --verbose progress lines may interleave; use 1 for sequential "
+        "output.",
     )
     parser.add_argument("--verbose", "-v", action="store_true", help="Verbose output")
     parser.add_argument("--json", action="store_true", help="Output as JSON")

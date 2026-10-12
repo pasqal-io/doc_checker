@@ -103,7 +103,10 @@ doc-checker --modules my_package --check-basic -v --root /path/to/project
 > for small models) and queues the rest, so raising `--quality-jobs` above it
 > only lengthens the queue. To go higher, restart the server with e.g.
 > `OLLAMA_NUM_PARALLEL=5 ollama serve`. Measured on an 8-API module with
-> `qwen3:1.7b`: 500 s at `--quality-jobs 1`, 163 s at the default 5.
+> `qwen3:1.7b`: 500 s at `--quality-jobs 1`, 163 s at the default 5. With cloud
+> backends a burst of 5 can hit per-key rate limits; the SDKs retry twice with
+> backoff, but a 429 that outlives the retries is reported as a `critical` error
+> issue (and so fails the run). Lower `--quality-jobs` if that happens.
 
 ### Quality severity
 

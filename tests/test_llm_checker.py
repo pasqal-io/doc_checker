@@ -10,6 +10,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from doc_checker.checkers_folder.quality import LLMQualityChecker, QualityChecker
+from doc_checker.constants import DEFAULT_QUALITY_JOBS
 from doc_checker.models import DriftReport, QualityIssue, SignatureInfo
 
 
@@ -505,24 +506,6 @@ def test_one_failing_api_does_not_abort_others(
     assert "boom" in issues[0].message
 
 
-@patch("doc_checker.checkers_folder.quality.ThreadPoolExecutor")
-@patch("doc_checker.checkers_folder.quality.get_backend")
-@patch("doc_checker.checkers_folder.quality.CodeAnalyzer")
-def test_max_workers_one_is_sequential(
-    mock_analyzer_class, mock_get_backend, mock_pool_class, tmp_path
-):
-    """max_workers=1 takes the plain loop: no executor is ever constructed."""
-    backend = MagicMock()
-    backend.generate_json.return_value = {"issues": []}
-    mock_get_backend.return_value = backend
-    mock_analyzer_class.return_value = _analyzer_with(_documented_apis(3))
-
-    QualityChecker(tmp_path, max_workers=1).check_module_quality("m")
-
-    mock_pool_class.assert_not_called()
-    assert backend.generate_json.call_count == 3
-
-
 @patch("doc_checker.checkers_folder.quality.get_backend")
 @patch("doc_checker.checkers_folder.quality.CodeAnalyzer")
 def test_quality_checker_multiple_issues(
@@ -685,6 +668,6 @@ def test_llm_quality_checker_missing_dep_is_soft_skip(mock_qc_class, tmp_path):
 def test_llm_quality_checker_forwards_max_workers(mock_qc_class, tmp_path):
     """max_workers reaches the inner QualityChecker (default 5)."""
     LLMQualityChecker(tmp_path, ["m"], set())
-    assert mock_qc_class.call_args.kwargs["max_workers"] == 5
+    assert mock_qc_class.call_args.kwargs["max_workers"] == DEFAULT_QUALITY_JOBS
     LLMQualityChecker(tmp_path, ["m"], set(), max_workers=2)
     assert mock_qc_class.call_args.kwargs["max_workers"] == 2

@@ -18,7 +18,12 @@ from doc_checker.checkers_folder.local_links import LocalLinksChecker
 from doc_checker.checkers_folder.nav_paths import NavPathsChecker
 from doc_checker.checkers_folder.quality import LLMQualityChecker
 from doc_checker.checkers_folder.references import ReferencesChecker
-from doc_checker.constants import DEFAULT_MODELS, SEVERITY_RANK, VALID_EFFORTS
+from doc_checker.constants import (
+    DEFAULT_MODELS,
+    DEFAULT_QUALITY_JOBS,
+    SEVERITY_RANK,
+    VALID_EFFORTS,
+)
 from doc_checker.utils.code_analyzer import CodeAnalyzer
 from doc_checker.utils.link_checker import LinkChecker
 from doc_checker.utils.parsers import MarkdownParser, YamlParser
@@ -64,7 +69,7 @@ class DriftDetector:
         quality_sample_rate: float = 1.0,
         quality_min_severity: str = "critical",
         quality_effort: str | None = None,
-        quality_jobs: int = 5,
+        quality_jobs: int = DEFAULT_QUALITY_JOBS,
     ) -> None:
         """Reject invalid or silently-ignored quality option combinations.
 
@@ -117,7 +122,7 @@ class DriftDetector:
         quality_sample_rate: float = 1.0,
         quality_min_severity: str = "critical",
         quality_effort: str | None = None,
-        quality_jobs: int = 5,
+        quality_jobs: int = DEFAULT_QUALITY_JOBS,
         verbose: bool = False,
         skip_basic_checks: bool = False,
     ) -> DriftReport:
