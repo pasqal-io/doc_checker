@@ -51,3 +51,7 @@ DEFAULT_MODELS = {
 
 # Effort levels accepted by the anthropic backend (--llm-effort).
 VALID_EFFORTS = {"low", "medium", "high", "xhigh", "max"}
+
+# Default parallel LLM calls per module (--quality-jobs). Single source for the
+# CLI, check_all, LLMQualityChecker and QualityChecker.
+DEFAULT_QUALITY_JOBS = 5

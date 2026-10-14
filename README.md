@@ -56,6 +56,7 @@ doc-checker --modules my_package --check-quality --llm-backend anthropic --root 
 doc-checker --modules my_package --check-quality --llm-backend anthropic --llm-effort low --root .
 doc-checker --modules my_package --check-quality --llm-model gpt-6.1-sol --root .
 doc-checker --modules my_package --check-quality --quality-sample 0.1 --root .
+doc-checker --modules my_package --check-quality --quality-jobs 10 --root .   # parallel LLM calls (default 5, 1 = sequential)
 
 # Quality reports only critical issues by default; widen to see more:
 doc-checker --modules my_package --check-quality --quality-min-severity warning --root .
@@ -94,6 +95,19 @@ doc-checker --modules my_package --check-basic -v --root /path/to/project
 > not sent; Claude Opus 5.5 rejects them. Thinking counts against the response
 > token budget, so if an API is reported as `LLM stopped early:
 > stop_reason=max_tokens`, re-run with `--llm-effort low`.
+
+> **Parallelism.** `--quality-jobs N` (default 5) runs N LLM calls at once; with
+> cloud backends the speedup is close to linear. With the `ollama` backend the
+> ceiling is the server, not the flag: Ollama runs at most `OLLAMA_NUM_PARALLEL`
+> requests concurrently (auto-chosen from free memory when unset, typically 4
+> for small models) and queues the rest, so raising `--quality-jobs` above it
+> only lengthens the queue. To go higher, restart the server with e.g.
+> `OLLAMA_NUM_PARALLEL=5 ollama serve`. Measured on an 8-API module with
+> `qwen3:1.7b`: 500 s at `--quality-jobs 1`, 163 s at the default 5. With cloud
+> backends a burst of 5 can hit per-key rate limits; the SDK clients retry up to
+> 5 times with backoff, but a 429 that outlives the retries is reported as a
+> `critical` error issue (and so fails the run). Lower `--quality-jobs` if that
+> happens. Ctrl-C exits immediately without waiting for in-flight calls.
 
 ### Quality severity
 

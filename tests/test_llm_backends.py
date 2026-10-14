@@ -138,7 +138,7 @@ def test_openai_backend_init():
 
         assert backend.model == "gpt-4o"
         assert backend.api_key == "test-key"
-        mock_openai_class.assert_called_once_with(api_key="test-key")
+        mock_openai_class.assert_called_once_with(api_key="test-key", max_retries=5)
 
 
 def test_openai_backend_default_model():
@@ -158,7 +158,7 @@ def test_openai_backend_api_key_from_env():
 
             assert backend.model == "gpt-4o"
             assert backend.api_key == "test-key"
-            mock_openai_class.assert_called_once_with(api_key="test-key")
+            mock_openai_class.assert_called_once_with(api_key="test-key", max_retries=5)
 
 
 def test_openai_backend_no_api_key():
@@ -207,7 +207,7 @@ def test_anthropic_backend_init():
         assert backend.model == "claude-sonnet-5"
         assert backend.api_key == "test-key"
         assert backend.effort == "medium"
-        mock_anthropic_class.assert_called_once_with(api_key="test-key")
+        mock_anthropic_class.assert_called_once_with(api_key="test-key", max_retries=5)
 
 
 def test_anthropic_backend_default_model():

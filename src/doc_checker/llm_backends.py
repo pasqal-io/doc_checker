@@ -147,7 +147,9 @@ class OpenAIBackend(LLMBackend):
                 "Or pass api_key parameter explicitly."
             )
 
-        self.client = OpenAI(api_key=self.api_key)
+        # SDK default is 2 retries; --quality-jobs bursts can outlive that on a
+        # rate-limited key, and retries cost nothing when not limited.
+        self.client = OpenAI(api_key=self.api_key, max_retries=5)
         self.model = model
 
     def generate(self, prompt: str) -> str:
@@ -200,7 +202,9 @@ class AnthropicBackend(LLMBackend):
                 "Or pass api_key parameter explicitly."
             )
 
-        self.client = Anthropic(api_key=self.api_key)
+        # SDK default is 2 retries; --quality-jobs bursts can outlive that on a
+        # rate-limited key, and retries cost nothing when not limited.
+        self.client = Anthropic(api_key=self.api_key, max_retries=5)
         self.model = model
         self.effort = effort
 
