@@ -104,9 +104,10 @@ doc-checker --modules my_package --check-basic -v --root /path/to/project
 > only lengthens the queue. To go higher, restart the server with e.g.
 > `OLLAMA_NUM_PARALLEL=5 ollama serve`. Measured on an 8-API module with
 > `qwen3:1.7b`: 500 s at `--quality-jobs 1`, 163 s at the default 5. With cloud
-> backends a burst of 5 can hit per-key rate limits; the SDKs retry twice with
-> backoff, but a 429 that outlives the retries is reported as a `critical` error
-> issue (and so fails the run). Lower `--quality-jobs` if that happens.
+> backends a burst of 5 can hit per-key rate limits; the SDK clients retry up to
+> 5 times with backoff, but a 429 that outlives the retries is reported as a
+> `critical` error issue (and so fails the run). Lower `--quality-jobs` if that
+> happens. Ctrl-C exits immediately without waiting for in-flight calls.
 
 ### Quality severity
 

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -170,6 +171,13 @@ def main() -> int:
             # Backend config error (e.g. missing API key); raised before any check
             print(f"Error: {e}", file=sys.stderr)
             return 1
+        except KeyboardInterrupt:
+            # Quality checks run on pool threads; a normal exit would join them
+            # (executor shutdown + atexit) and so wait for every in-flight LLM
+            # call. Skip that: the user asked to stop now.
+            print("\nInterrupted", file=sys.stderr)
+            sys.stdout.flush()
+            os._exit(130)
 
         if args.json:
             print(json.dumps(report.to_dict(), indent=2))

@@ -213,7 +213,7 @@ def test_format_report_unknown_quality_severity_does_not_crash():
 def test_integration_with_quality_checks_mocked(integration_project: Path):
     """Test integration with mocked LLM quality checks."""
     mock_checker = MagicMock()
-    mock_checker.check_module_quality.return_value = [
+    mock_checker.check_modules_quality.return_value = [
         MagicMock(
             api_name="my_lib.Simulator.evolve",
             severity="warning",
@@ -321,7 +321,7 @@ def test_integration_json_output(integration_project: Path):
     detector = DriftDetector(integration_project, modules=["my_lib"])
 
     mock_checker = MagicMock()
-    mock_checker.check_module_quality.return_value = [
+    mock_checker.check_modules_quality.return_value = [
         MagicMock(
             api_name="test",
             severity="critical",
@@ -431,7 +431,7 @@ class TestCLIBehavior:
         detector = DriftDetector(integration_project, modules=["my_lib"])
 
         mock_checker = MagicMock()
-        mock_checker.check_module_quality.return_value = []
+        mock_checker.check_modules_quality.return_value = []
 
         with patch("doc_checker.checkers_folder.quality.QualityChecker") as mock_cls:
             mock_cls.return_value = mock_checker
@@ -449,14 +449,14 @@ class TestCLIBehavior:
         assert len(report.broken_external_links) == 0
 
         # Quality checker was called
-        mock_checker.check_module_quality.assert_called()
+        mock_checker.check_modules_quality.assert_called()
 
     def test_check_all_runs_everything(self, integration_project: Path):
         """Test --check-all (default) runs all checks."""
         detector = DriftDetector(integration_project, modules=["my_lib"])
 
         mock_checker = MagicMock()
-        mock_checker.check_module_quality.return_value = []
+        mock_checker.check_modules_quality.return_value = []
 
         with patch("doc_checker.checkers_folder.quality.QualityChecker") as mock_cls:
             mock_cls.return_value = mock_checker
@@ -470,7 +470,7 @@ class TestCLIBehavior:
         assert hasattr(report, "broken_references")
 
         # Quality checker was called
-        mock_checker.check_module_quality.assert_called()
+        mock_checker.check_modules_quality.assert_called()
 
 
 class TestWarnOnly:
@@ -609,3 +609,24 @@ class TestQualityPreflight:
         captured = capsys.readouterr()
         assert env_var in captured.err
         assert "DOCUMENTATION DRIFT REPORT" not in captured.out
+
+
+def test_ctrl_c_exits_without_joining_workers(integration_project: Path, capsys):
+    """KeyboardInterrupt during checks exits 130 via os._exit (no pool join)."""
+    argv = [
+        "doc-checker",
+        "--check-basic",
+        "--modules",
+        "my_lib",
+        "--root",
+        str(integration_project),
+    ]
+    with (
+        patch("sys.argv", argv),
+        patch("doc_checker.cli.DriftDetector.check_all", side_effect=KeyboardInterrupt),
+        patch("doc_checker.cli.os._exit", side_effect=SystemExit) as mock_exit,
+    ):
+        with pytest.raises(SystemExit):
+            main()
+    mock_exit.assert_called_once_with(130)
+    assert "Interrupted" in capsys.readouterr().err
