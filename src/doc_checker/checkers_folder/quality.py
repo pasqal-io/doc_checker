@@ -154,41 +154,13 @@ class QualityChecker:
         self.ignore_submodules = ignore_submodules
         self.max_workers = max_workers
 
-    def check_api_quality(
-        self, api_name: str, module_name: str, verbose: bool = False
-    ) -> list[QualityIssue]:
-        """Check quality of single API documentation.
-
-        Args:
-            api_name: API name (e.g., "MPS.evolve")
-            module_name: Module name (e.g., "emu_mps")
-            verbose: Print progress
-
-        Returns:
-            List of quality issues found
-        """
-        # Get API info
-        apis = self.code_analyzer.get_public_apis(module_name)
-        api_info = next((api for api in apis if api.name == api_name), None)
-
-        if not api_info:
-            return _single_issue(
-                f"{module_name}.{api_name}",
-                f"API {api_name} not found in module {module_name}",
-                "Check API name spelling",
-            )
-
-        return self._check_api_info(api_info, verbose)
-
     def _check_api_info(
         self, api_info: SignatureInfo, verbose: bool = False
     ) -> list[QualityIssue]:
-        """Run quality checks on an already-resolved API.
+        """Run quality checks on one already-discovered API.
 
-        Takes the SignatureInfo directly (no re-lookup), so callers that already
-        discovered the API — e.g. via get_all_public_apis across submodules — do
-        not get spurious "not found" results. The reported name uses the API's
-        real module so submodule APIs are labelled correctly.
+        The reported name uses the API's real module so submodule APIs are
+        labelled correctly.
         """
         display_name = f"{api_info.module}.{api_info.name}"
 
@@ -265,12 +237,6 @@ class QualityChecker:
             print(f"    Found {len(issues)} issues in {display_name}")
 
         return issues
-
-    def check_module_quality(
-        self, module_name: str, verbose: bool = False, sample_rate: float = 1.0
-    ) -> list[QualityIssue]:
-        """Check quality of all APIs in one module (see check_modules_quality)."""
-        return self.check_modules_quality([module_name], verbose, sample_rate)
 
     def check_modules_quality(
         self, modules: list[str], verbose: bool = False, sample_rate: float = 1.0

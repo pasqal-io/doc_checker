@@ -48,32 +48,31 @@ def mock_backend():
     return backend
 
 
+TEST_FUNC = SignatureInfo(
+    name="test_func",
+    module="test_module",
+    parameters=["x: int", "y: str = 'default'"],
+    return_annotation="bool",
+    docstring="Test function docstring.",
+    is_public=True,
+    kind="function",
+)
+NO_DOCSTRING_FUNC = SignatureInfo(
+    name="no_docstring_func",
+    module="test_module",
+    parameters=[],
+    return_annotation=None,
+    docstring=None,
+    is_public=True,
+    kind="function",
+)
+
+
 @pytest.fixture
 def mock_code_analyzer(tmp_path: Path):
     """Mock code analyzer."""
     analyzer = MagicMock()
-    apis = [
-        SignatureInfo(
-            name="test_func",
-            module="test_module",
-            parameters=["x: int", "y: str = 'default'"],
-            return_annotation="bool",
-            docstring="Test function docstring.",
-            is_public=True,
-            kind="function",
-        ),
-        SignatureInfo(
-            name="no_docstring_func",
-            module="test_module",
-            parameters=[],
-            return_annotation=None,
-            docstring=None,
-            is_public=True,
-            kind="function",
-        ),
-    ]
-    analyzer.get_public_apis.return_value = apis
-    analyzer.get_all_public_apis.return_value = (apis, set())
+    analyzer.get_all_public_apis.return_value = ([TEST_FUNC, NO_DOCSTRING_FUNC], set())
     # Fall back to content-based dedup (distinct names stay distinct) instead of
     # a shared MagicMock identity that would collapse all APIs into one.
     analyzer.get_canonical_key.return_value = None
@@ -114,7 +113,7 @@ def test_quality_checker_forwards_effort(mock_analyzer_class, mock_get_backend, 
 
 @patch("doc_checker.checkers_folder.quality.get_backend")
 @patch("doc_checker.checkers_folder.quality.CodeAnalyzer")
-def test_quality_checker_check_api_quality_success(
+def test_quality_checker_check_api_info_success(
     mock_analyzer_class, mock_get_backend, tmp_path, mock_backend, mock_code_analyzer
 ):
     """Test successful API quality check."""
@@ -122,7 +121,7 @@ def test_quality_checker_check_api_quality_success(
     mock_analyzer_class.return_value = mock_code_analyzer
 
     checker = QualityChecker(tmp_path)
-    issues = checker.check_api_quality("test_func", "test_module", verbose=False)
+    issues = checker._check_api_info(TEST_FUNC)
 
     assert len(issues) == 1
     assert issues[0].api_name == "test_module.test_func"
@@ -139,7 +138,7 @@ def test_quality_checker_check_api_quality_success(
 def test_quality_checker_forwards_source_excerpt(
     mock_analyzer_class, mock_get_backend, mock_prompt, tmp_path, mock_backend
 ):
-    """check_api_quality passes the API's source excerpt to the prompt builder."""
+    """A pre-set source excerpt is passed to the prompt builder."""
     api = SignatureInfo(
         name="test_func",
         module="test_module",
@@ -150,36 +149,16 @@ def test_quality_checker_forwards_source_excerpt(
         kind="function",
         source_excerpt="def test_func(x):\n    return x > 0",
     )
-    analyzer = MagicMock()
-    analyzer.get_public_apis.return_value = [api]
-    mock_analyzer_class.return_value = analyzer
+    mock_analyzer_class.return_value = MagicMock()
     mock_get_backend.return_value = mock_backend
     mock_prompt.return_value = "prompt"
 
     checker = QualityChecker(tmp_path)
-    checker.check_api_quality("test_func", "test_module")
+    checker._check_api_info(api)
 
     assert mock_prompt.call_args.kwargs["code_snippet"] == (
         "def test_func(x):\n    return x > 0"
     )
-
-
-@patch("doc_checker.checkers_folder.quality.get_backend")
-@patch("doc_checker.checkers_folder.quality.CodeAnalyzer")
-def test_quality_checker_api_not_found(
-    mock_analyzer_class, mock_get_backend, tmp_path, mock_backend, mock_code_analyzer
-):
-    """Test quality check for non-existent API."""
-    mock_get_backend.return_value = mock_backend
-    mock_analyzer_class.return_value = mock_code_analyzer
-
-    checker = QualityChecker(tmp_path)
-    issues = checker.check_api_quality("nonexistent", "test_module")
-
-    assert len(issues) == 1
-    assert issues[0].severity == "critical"
-    assert issues[0].category == "error"
-    assert "not found" in issues[0].message
 
 
 @patch("doc_checker.checkers_folder.quality.get_backend")
@@ -192,7 +171,7 @@ def test_quality_checker_no_docstring(
     mock_analyzer_class.return_value = mock_code_analyzer
 
     checker = QualityChecker(tmp_path)
-    issues = checker.check_api_quality("no_docstring_func", "test_module")
+    issues = checker._check_api_info(NO_DOCSTRING_FUNC)
 
     assert len(issues) == 1
     assert issues[0].severity == "critical"
@@ -212,7 +191,7 @@ def test_quality_checker_llm_failure(
     mock_analyzer_class.return_value = mock_code_analyzer
 
     checker = QualityChecker(tmp_path)
-    issues = checker.check_api_quality("test_func", "test_module")
+    issues = checker._check_api_info(TEST_FUNC)
 
     assert len(issues) == 1
     assert issues[0].severity == "critical"
@@ -236,7 +215,7 @@ def test_quality_checker_surfaces_parse_failure(
     mock_analyzer_class.return_value = mock_code_analyzer
 
     checker = QualityChecker(tmp_path)
-    issues = checker.check_api_quality("test_func", "test_module")
+    issues = checker._check_api_info(TEST_FUNC)
 
     assert len(issues) == 1
     assert issues[0].severity == "critical"
@@ -259,7 +238,7 @@ def test_quality_checker_verbose_output(
     mock_analyzer_class.return_value = mock_code_analyzer
 
     checker = QualityChecker(tmp_path)
-    checker.check_api_quality("test_func", "test_module", verbose=True)
+    checker._check_api_info(TEST_FUNC, verbose=True)
 
     captured = capsys.readouterr()
     assert "Checking test_module.test_func" in captured.out
@@ -268,7 +247,7 @@ def test_quality_checker_verbose_output(
 
 @patch("doc_checker.checkers_folder.quality.get_backend")
 @patch("doc_checker.checkers_folder.quality.CodeAnalyzer")
-def test_quality_checker_check_module_quality(
+def test_quality_checker_check_modules_quality(
     mock_analyzer_class, mock_get_backend, tmp_path, mock_backend, mock_code_analyzer
 ):
     """Test checking entire module quality."""
@@ -276,7 +255,7 @@ def test_quality_checker_check_module_quality(
     mock_analyzer_class.return_value = mock_code_analyzer
 
     checker = QualityChecker(tmp_path)
-    issues = checker.check_module_quality("test_module", verbose=False)
+    issues = checker.check_modules_quality(["test_module"], verbose=False)
 
     # Checks both: test_func (LLM issue) and no_docstring_func (no docstring)
     assert len(issues) == 2
@@ -306,14 +285,15 @@ def test_quality_checker_sample_rate(
     ]
 
     mock_analyzer = MagicMock()
-    mock_analyzer.get_public_apis.return_value = apis
     mock_analyzer.get_all_public_apis.return_value = (apis, set())
     mock_analyzer.get_canonical_key.return_value = None
     mock_analyzer_class.return_value = mock_analyzer
     mock_get_backend.return_value = mock_backend
 
     checker = QualityChecker(tmp_path)
-    issues = checker.check_module_quality("test_module", verbose=False, sample_rate=0.3)
+    issues = checker.check_modules_quality(
+        ["test_module"], verbose=False, sample_rate=0.3
+    )
 
     # Should check ~3 APIs (30% of 10)
     # Each API generates 1 issue, so ~3 issues
@@ -353,7 +333,7 @@ def test_quality_checker_dedup_uses_canonical_identity(
     mock_get_backend.return_value = mock_backend
 
     checker = QualityChecker(tmp_path)
-    issues = checker.check_module_quality("pkg", verbose=False)
+    issues = checker.check_modules_quality(["pkg"], verbose=False)
 
     # Two distinct Writers checked (io + plot); the pkg re-export merged into io.
     assert len(issues) == 2
@@ -384,7 +364,9 @@ def test_quality_checker_sample_rate_small_module_checks_at_least_one(
 
     checker = QualityChecker(tmp_path)
     # int(1 * 0.1) == 0 would silently check nothing; ceil+max(1, ...) checks one.
-    issues = checker.check_module_quality("test_module", verbose=False, sample_rate=0.1)
+    issues = checker.check_modules_quality(
+        ["test_module"], verbose=False, sample_rate=0.1
+    )
 
     assert len(issues) == 1
 
@@ -414,7 +396,7 @@ def _analyzer_with(apis: list[SignatureInfo]) -> MagicMock:
 
 @patch("doc_checker.checkers_folder.quality.get_backend")
 @patch("doc_checker.checkers_folder.quality.CodeAnalyzer")
-def test_check_module_quality_runs_in_parallel_and_keeps_order(
+def test_check_modules_quality_runs_in_parallel_and_keeps_order(
     mock_analyzer_class, mock_get_backend, tmp_path
 ):
     """All max_workers calls are in flight at once; issues keep unique_apis order."""
@@ -430,14 +412,14 @@ def test_check_module_quality_runs_in_parallel_and_keeps_order(
         return _single_issue(f"m.{api.name}", api.name, "")
 
     with patch.object(checker, "_check_api_info", side_effect=wait_for_all):
-        issues = checker.check_module_quality("m")
+        issues = checker.check_modules_quality(["m"])
 
     assert [i.message for i in issues] == [a.name for a in apis]
 
 
 @patch("doc_checker.checkers_folder.quality.get_backend")
 @patch("doc_checker.checkers_folder.quality.CodeAnalyzer")
-def test_check_module_quality_max_workers_one_is_sequential(
+def test_check_modules_quality_max_workers_one_is_sequential(
     mock_analyzer_class, mock_get_backend, tmp_path
 ):
     """max_workers=1 runs every call on the same single thread."""
@@ -451,7 +433,7 @@ def test_check_module_quality_max_workers_one_is_sequential(
         return []
 
     with patch.object(checker, "_check_api_info", side_effect=record) as mock_check:
-        checker.check_module_quality("m")
+        checker.check_modules_quality(["m"])
 
     assert mock_check.call_count == 4
     assert len(threads) == 1
@@ -470,7 +452,7 @@ def test_source_lookup_failure_is_one_error_issue(
     analyzer.get_source_excerpt.side_effect = [RuntimeError("pep562"), None]
     mock_analyzer_class.return_value = analyzer
 
-    issues = QualityChecker(tmp_path, max_workers=2).check_module_quality("m")
+    issues = QualityChecker(tmp_path, max_workers=2).check_modules_quality(["m"])
 
     assert backend.generate_json.call_count == 1
     assert [(i.api_name, i.category) for i in issues] == [("m.func_0", "error")]
@@ -515,7 +497,7 @@ def test_one_failing_api_does_not_abort_others(
     mock_analyzer_class.return_value = _analyzer_with(_documented_apis(3))
 
     checker = QualityChecker(tmp_path, max_workers=5)
-    issues = checker.check_module_quality("m")
+    issues = checker.check_modules_quality(["m"])
 
     assert backend.generate_json.call_count == 3
     assert [(i.api_name, i.category) for i in issues] == [("m.func_1", "error")]
@@ -560,7 +542,7 @@ def test_quality_checker_multiple_issues(
     mock_analyzer_class.return_value = mock_code_analyzer
 
     checker = QualityChecker(tmp_path)
-    issues = checker.check_api_quality("test_func", "test_module")
+    issues = checker._check_api_info(TEST_FUNC)
 
     assert len(issues) == 3
     assert issues[0].severity == "critical"
@@ -584,7 +566,7 @@ def test_quality_checker_no_issues(
     mock_analyzer_class.return_value = mock_code_analyzer
 
     checker = QualityChecker(tmp_path)
-    issues = checker.check_api_quality("test_func", "test_module")
+    issues = checker._check_api_info(TEST_FUNC)
 
     assert len(issues) == 0
 
@@ -596,13 +578,12 @@ def test_quality_checker_empty_module(
 ):
     """Test quality check on module with no APIs."""
     mock_analyzer = MagicMock()
-    mock_analyzer.get_public_apis.return_value = []
     mock_analyzer.get_all_public_apis.return_value = ([], set())
     mock_analyzer_class.return_value = mock_analyzer
     mock_get_backend.return_value = mock_backend
 
     checker = QualityChecker(tmp_path)
-    issues = checker.check_module_quality("empty_module")
+    issues = checker.check_modules_quality(["empty_module"])
 
     assert len(issues) == 1
     assert "No public APIs found" in issues[0].message
