@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import math
 import random
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
-from doc_checker.constants import SEVERITY_RANK, VALID_EFFORTS
+from doc_checker.constants import DEFAULT_QUALITY_JOBS, SEVERITY_RANK, VALID_EFFORTS
 from doc_checker.llm_backends import get_backend
 from doc_checker.models import DriftReport, QualityIssue, SignatureInfo
 from doc_checker.prompts import get_combined_quality_prompt
@@ -58,6 +59,7 @@ class LLMQualityChecker(Checker):
         min_severity: str = "critical",
         verbose: bool = False,
         effort: str = "medium",
+        max_workers: int = DEFAULT_QUALITY_JOBS,
     ):
         self.root_path = root_path
         self.modules = modules
@@ -78,6 +80,9 @@ class LLMQualityChecker(Checker):
             )
         self.min_severity = min_severity
         self.verbose = verbose
+        if max_workers < 1:
+            raise ValueError(f"max_workers must be >= 1, got {max_workers}")
+        self.max_workers = max_workers
         # Build the backend now so config errors (missing API key, unknown backend)
         # raise ValueError before any checker runs. Only a missing package or an
         # unreachable local service is a soft skip.
@@ -91,6 +96,7 @@ class LLMQualityChecker(Checker):
                 self.api_key,
                 ignore_submodules=self.ignore_submodules,
                 effort=self.effort,
+                max_workers=self.max_workers,
             )
         except (ImportError, RuntimeError) as e:
             self._skip_reason = str(e)
@@ -104,13 +110,14 @@ class LLMQualityChecker(Checker):
         if self.verbose:
             print(f"LLM quality checks ({self.backend_type}, {checker.backend.model})...")
         threshold = SEVERITY_RANK[self.min_severity]
-        for module in self.modules:
-            issues = checker.check_module_quality(module, self.verbose, self.sample_rate)
-            report.quality_issues.extend(
-                issue
-                for issue in issues
-                if SEVERITY_RANK.get(issue.severity, 99) >= threshold
-            )
+        issues = checker.check_modules_quality(
+            self.modules, self.verbose, self.sample_rate
+        )
+        report.quality_issues.extend(
+            issue
+            for issue in issues
+            if SEVERITY_RANK.get(issue.severity, 99) >= threshold
+        )
 
 
 class QualityChecker:
@@ -124,6 +131,7 @@ class QualityChecker:
         api_key: str | None = None,
         ignore_submodules: set[str] | None = None,
         effort: str = "medium",
+        max_workers: int = DEFAULT_QUALITY_JOBS,
     ):
         """Initialize quality checker.
 
@@ -134,6 +142,7 @@ class QualityChecker:
             api_key: API key for cloud backends
             ignore_submodules: Submodule names to skip.
             effort: Effort level for the anthropic backend (ignored by others).
+            max_workers: Parallel LLM calls; 1 = sequential.
 
         Raises:
             ImportError: If backend package not installed
@@ -143,42 +152,15 @@ class QualityChecker:
         self.code_analyzer = CodeAnalyzer(root_path)
         self.backend = get_backend(backend_type, model, api_key, effort=effort)
         self.ignore_submodules = ignore_submodules
-
-    def check_api_quality(
-        self, api_name: str, module_name: str, verbose: bool = False
-    ) -> list[QualityIssue]:
-        """Check quality of single API documentation.
-
-        Args:
-            api_name: API name (e.g., "MPS.evolve")
-            module_name: Module name (e.g., "emu_mps")
-            verbose: Print progress
-
-        Returns:
-            List of quality issues found
-        """
-        # Get API info
-        apis = self.code_analyzer.get_public_apis(module_name)
-        api_info = next((api for api in apis if api.name == api_name), None)
-
-        if not api_info:
-            return _single_issue(
-                f"{module_name}.{api_name}",
-                f"API {api_name} not found in module {module_name}",
-                "Check API name spelling",
-            )
-
-        return self._check_api_info(api_info, verbose)
+        self.max_workers = max_workers
 
     def _check_api_info(
         self, api_info: SignatureInfo, verbose: bool = False
     ) -> list[QualityIssue]:
-        """Run quality checks on an already-resolved API.
+        """Run quality checks on one already-discovered API.
 
-        Takes the SignatureInfo directly (no re-lookup), so callers that already
-        discovered the API — e.g. via get_all_public_apis across submodules — do
-        not get spurious "not found" results. The reported name uses the API's
-        real module so submodule APIs are labelled correctly.
+        The reported name uses the API's real module so submodule APIs are
+        labelled correctly.
         """
         display_name = f"{api_info.module}.{api_info.name}"
 
@@ -204,21 +186,22 @@ class QualityChecker:
         if verbose:
             print(f"  Checking {display_name}...")
 
-        # Source fetched on demand so only APIs reaching the LLM pay the
-        # inspect.getsource cost; a pre-set excerpt (e.g. in tests) wins.
-        code_snippet = api_info.source_excerpt or self.code_analyzer.get_source_excerpt(
-            api_info.module, api_info.name
-        )
-
-        # Get LLM evaluation
-        prompt = get_combined_quality_prompt(
-            signature=signature,
-            docstring=api_info.docstring,
-            api_name=display_name,
-            code_snippet=code_snippet,
-        )
-
+        # Everything from source lookup to the backend call is inside the try:
+        # this runs on a pool worker, and an escaping exception would abort the
+        # whole module instead of producing one error issue for this API.
         try:
+            # Source fetched on demand so only APIs reaching the LLM pay the
+            # inspect.getsource cost; a pre-set excerpt (e.g. in tests) wins.
+            code_snippet = (
+                api_info.source_excerpt
+                or self.code_analyzer.get_source_excerpt(api_info.module, api_info.name)
+            )
+            prompt = get_combined_quality_prompt(
+                signature=signature,
+                docstring=api_info.docstring,
+                api_name=display_name,
+                code_snippet=code_snippet,
+            )
             response = self.backend.generate_json(prompt)
         except Exception as e:
             return _single_issue(
@@ -251,64 +234,87 @@ class QualityChecker:
             )
 
         if verbose and issues:
-            print(f"    Found {len(issues)} issues")
+            print(f"    Found {len(issues)} issues in {display_name}")
 
         return issues
 
-    def check_module_quality(
-        self, module_name: str, verbose: bool = False, sample_rate: float = 1.0
+    def check_modules_quality(
+        self, modules: list[str], verbose: bool = False, sample_rate: float = 1.0
     ) -> list[QualityIssue]:
-        """Check quality of all APIs in a module.
+        """Check quality of all APIs in the given modules.
+
+        APIs from every module share one thread pool, so no worker idles at a
+        module boundary, and re-exports are deduped across modules so the same
+        object is sent to the LLM once.
 
         Args:
-            module_name: Module to check (e.g., "emu_mps")
+            modules: Modules to check (e.g., ["emu_mps", "emu_sv"])
             verbose: Print progress
-            sample_rate: Check only this fraction of APIs, in (0.0, 1.0]
+            sample_rate: Check only this fraction of each module's APIs, in (0.0, 1.0]
 
         Returns:
             List of all quality issues found
         """
-        apis, _ = self.code_analyzer.get_all_public_apis(
-            module_name, self.ignore_submodules
-        )
-
-        if not apis:
-            if verbose:
-                print(f"No public APIs found in {module_name}")
-            return _single_issue(
-                module_name,
-                f"No public APIs found in module {module_name}",
-                "Check module name or ensure it is installed",
-            )
-
-        # Dedupe re-exports by canonical identity (defining module + qualname) so
-        # duplicates merge but distinct same-named APIs stay separate (contract fallback).
+        issues: list[QualityIssue] = []
         unique_apis: list[SignatureInfo] = []
         seen: set[object] = set()
-        for api in apis:
-            key: object = self.code_analyzer.get_canonical_key(api.module, api.name)
-            if key is None:
-                key = (
-                    api.name,
-                    tuple(api.parameters),
-                    api.return_annotation,
-                    api.docstring,
+        for module_name in modules:
+            apis, _ = self.code_analyzer.get_all_public_apis(
+                module_name, self.ignore_submodules
+            )
+            if not apis:
+                if verbose:
+                    print(f"No public APIs found in {module_name}")
+                issues += _single_issue(
+                    module_name,
+                    f"No public APIs found in module {module_name}",
+                    "Check module name or ensure it is installed",
                 )
-            if key not in seen:
-                seen.add(key)
-                unique_apis.append(api)
+                continue
 
-        if sample_rate < 1.0:
-            # Round up so a small module with positive sample_rate still checks at
-            # least one API instead of truncating to zero (int(1 * 0.5) == 0).
-            k = max(1, math.ceil(len(unique_apis) * sample_rate))
-            unique_apis = random.sample(unique_apis, k)
+            # Dedupe re-exports by canonical identity (defining module + qualname)
+            # so duplicates merge but distinct same-named APIs stay separate
+            # (contract fallback).
+            module_apis: list[SignatureInfo] = []
+            for api in apis:
+                key: object = self.code_analyzer.get_canonical_key(api.module, api.name)
+                if key is None:
+                    key = (
+                        api.name,
+                        tuple(api.parameters),
+                        api.return_annotation,
+                        api.docstring,
+                    )
+                if key not in seen:
+                    seen.add(key)
+                    module_apis.append(api)
 
-        if verbose:
-            print(f"Checking {len(unique_apis)} APIs in {module_name}...")
+            if sample_rate < 1.0 and module_apis:
+                # Round up so a small module with positive sample_rate still checks
+                # at least one API instead of truncating to zero (int(1 * 0.5) == 0).
+                k = max(1, math.ceil(len(module_apis) * sample_rate))
+                module_apis = random.sample(module_apis, k)
 
-        all_issues = []
-        for api in unique_apis:
-            all_issues.extend(self._check_api_info(api, verbose))
+            if verbose:
+                print(f"Checking {len(module_apis)} APIs in {module_name}...")
+            unique_apis += module_apis
 
-        return all_issues
+        # Each API is an independent blocking LLM call, so run them on a bounded
+        # thread pool (1 worker == sequential). pool.map preserves input order,
+        # keeping issue ordering deterministic, and _check_api_info turns any
+        # per-API exception into a single error issue so one bad call never
+        # aborts the rest. Not a `with` block: on Ctrl-C, __exit__ would join the
+        # in-flight calls (unbounded for ollama) before the KeyboardInterrupt
+        # could reach cli.main; shutdown(wait=False) lets it propagate at once.
+        pool = ThreadPoolExecutor(max_workers=self.max_workers)
+        try:
+            results = pool.map(
+                lambda api: self._check_api_info(api, verbose), unique_apis
+            )
+            issues += [issue for api_issues in results for issue in api_issues]
+        except BaseException:
+            pool.shutdown(wait=False, cancel_futures=True)
+            raise
+        pool.shutdown()
+
+        return issues

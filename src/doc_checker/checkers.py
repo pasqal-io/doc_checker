@@ -18,7 +18,12 @@ from doc_checker.checkers_folder.local_links import LocalLinksChecker
 from doc_checker.checkers_folder.nav_paths import NavPathsChecker
 from doc_checker.checkers_folder.quality import LLMQualityChecker
 from doc_checker.checkers_folder.references import ReferencesChecker
-from doc_checker.constants import DEFAULT_MODELS, SEVERITY_RANK, VALID_EFFORTS
+from doc_checker.constants import (
+    DEFAULT_MODELS,
+    DEFAULT_QUALITY_JOBS,
+    SEVERITY_RANK,
+    VALID_EFFORTS,
+)
 from doc_checker.utils.code_analyzer import CodeAnalyzer
 from doc_checker.utils.link_checker import LinkChecker
 from doc_checker.utils.parsers import MarkdownParser, YamlParser
@@ -64,6 +69,7 @@ class DriftDetector:
         quality_sample_rate: float = 1.0,
         quality_min_severity: str = "critical",
         quality_effort: str | None = None,
+        quality_jobs: int = DEFAULT_QUALITY_JOBS,
     ) -> None:
         """Reject invalid or silently-ignored quality option combinations.
 
@@ -72,8 +78,9 @@ class DriftDetector:
 
         Raises:
             ValueError: Unknown backend/severity, sample rate outside (0, 1],
-                or an effort given without check_quality / with a non-anthropic
-                backend (effort is only honoured by the anthropic backend).
+                quality_jobs < 1, or an effort given without check_quality /
+                with a non-anthropic backend (effort is only honoured by the
+                anthropic backend).
         """
         if quality_backend not in DEFAULT_MODELS:
             raise ValueError(
@@ -89,6 +96,8 @@ class DriftDetector:
             raise ValueError(
                 f"quality sample rate must be in (0, 1], got {quality_sample_rate}"
             )
+        if quality_jobs < 1:
+            raise ValueError(f"quality jobs must be >= 1, got {quality_jobs}")
         if quality_effort is not None:
             if quality_effort not in VALID_EFFORTS:
                 raise ValueError(
@@ -113,6 +122,7 @@ class DriftDetector:
         quality_sample_rate: float = 1.0,
         quality_min_severity: str = "critical",
         quality_effort: str | None = None,
+        quality_jobs: int = DEFAULT_QUALITY_JOBS,
         verbose: bool = False,
         skip_basic_checks: bool = False,
     ) -> DriftReport:
@@ -136,6 +146,7 @@ class DriftDetector:
             quality_min_severity: Drop quality issues below this severity
                 ("suggestion", "warning", or "critical"). Default "critical"
                 reports only the most important issues.
+            quality_jobs: Parallel LLM calls per module (default 5; 1 = sequential).
             verbose: Print progress info.
             skip_basic_checks: Skip basic checks (for standalone link/quality runs).
 
@@ -151,6 +162,7 @@ class DriftDetector:
             quality_sample_rate,
             quality_min_severity,
             quality_effort,
+            quality_jobs,
         )
         report = DriftReport()
         if check_quality:
@@ -204,6 +216,7 @@ class DriftDetector:
                     min_severity=quality_min_severity,
                     verbose=verbose,
                     effort=quality_effort or "medium",
+                    max_workers=quality_jobs,
                 )
             )
         for checker in checkers:

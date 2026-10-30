@@ -4,11 +4,12 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from pathlib import Path
 
 from .checkers import DriftDetector
-from .constants import DEFAULT_MODELS, VALID_EFFORTS
+from .constants import DEFAULT_MODELS, DEFAULT_QUALITY_JOBS, VALID_EFFORTS
 from .formatters import format_report
 
 
@@ -67,6 +68,15 @@ def main() -> int:
         help="Minimum severity to report (default: critical; use 'warning' or "
         "'suggestion' to also see less severe issues)",
     )
+    parser.add_argument(
+        "--quality-jobs",
+        type=int,
+        default=DEFAULT_QUALITY_JOBS,
+        metavar="N",
+        help=f"Parallel LLM quality calls per module (default: {DEFAULT_QUALITY_JOBS}). "
+        "With N > 1, --verbose progress lines may interleave; use 1 for sequential "
+        "output.",
+    )
     parser.add_argument("--verbose", "-v", action="store_true", help="Verbose output")
     parser.add_argument("--json", action="store_true", help="Output as JSON")
     parser.add_argument(
@@ -122,6 +132,7 @@ def main() -> int:
             quality_sample_rate=args.quality_sample,
             quality_min_severity=args.quality_min_severity,
             quality_effort=args.llm_effort,
+            quality_jobs=args.quality_jobs,
         )
     except ValueError as e:
         parser.error(str(e))
@@ -153,12 +164,20 @@ def main() -> int:
                 quality_sample_rate=args.quality_sample,
                 quality_min_severity=args.quality_min_severity,
                 quality_effort=args.llm_effort,
+                quality_jobs=args.quality_jobs,
                 verbose=args.verbose,
             )
         except ValueError as e:
             # Backend config error (e.g. missing API key); raised before any check
             print(f"Error: {e}", file=sys.stderr)
             return 1
+        except KeyboardInterrupt:
+            # Quality checks run on pool threads; a normal exit would join them
+            # (executor shutdown + atexit) and so wait for every in-flight LLM
+            # call. Skip that: the user asked to stop now.
+            print("\nInterrupted", file=sys.stderr)
+            sys.stdout.flush()
+            os._exit(130)
 
         if args.json:
             print(json.dumps(report.to_dict(), indent=2))
